@@ -2,7 +2,6 @@
 
 import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
-import { supabase } from '@/lib/supabase';
 import { useAuth } from '@/context/AuthContext';
 import { PostCard } from '@/components/forum/PostCard';
 import { Button } from '@/components/ui/button';
@@ -12,6 +11,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { PlusCircle, Search, TrendingUp, Clock, Filter } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import Link from 'next/link';
+import { mockPosts, mockUsers, mockReactions, mockComments, mockCategoryPost, mockCategories, currentUser } from '@/lib/mockData';
 
 export default function ForumPage() {
   const router = useRouter();
@@ -31,37 +31,32 @@ export default function ForumPage() {
 
   const fetchPosts = async () => {
     try {
-      const { data: postsData, error: postsError } = await supabase
-        .from('posts')
-        .select(`
-          *,
-          author:profiles(id, full_name, avatar_url, reputation_points),
-          subject:subjects(name)
-        `)
-        .order('created_at', { ascending: false })
-        .limit(50);
+      const postsWithCounts = mockPosts.map((post) => {
+        const author = mockUsers.find(u => u.id === post.author_id);
+        const reactions = mockReactions.filter(r => r.post_id === post.id);
+        const comments = mockComments.filter(c => c.post_id === post.id);
+        const postCategories = mockCategoryPost
+          .filter(cp => cp.post_id === post.id)
+          .map(cp => mockCategories.find(cat => cat.id === cp.category_id))
+          .filter(Boolean);
 
-      if (postsError) throw postsError;
-
-      const postsWithCounts = await Promise.all(
-        (postsData || []).map(async (post) => {
-          const [likesRes, commentsRes, tagsRes] = await Promise.all([
-            supabase.from('likes').select('id', { count: 'exact' }).eq('post_id', post.id),
-            supabase.from('comments').select('id', { count: 'exact' }).eq('post_id', post.id),
-            supabase
-              .from('post_tags')
-              .select('tag_id, tags(id, name, color)')
-              .eq('post_id', post.id),
-          ]);
-
-          return {
-            ...post,
-            likes_count: likesRes.count || 0,
-            comments_count: commentsRes.count || 0,
-            tags: tagsRes.data?.map((t: any) => t.tags).filter(Boolean) || [],
-          };
-        })
-      );
+        return {
+          ...post,
+          author: {
+            id: author?.id,
+            full_name: author?.full_name,
+            avatar_url: author?.avatar_url,
+            reputation_points: author?.point
+          },
+          likes_count: reactions.filter(r => r.is_positive).length,
+          comments_count: comments.length,
+          tags: postCategories.map(cat => ({
+            id: cat?.id,
+            name: cat?.name,
+            color: 'blue'
+          }))
+        };
+      });
 
       setPosts(postsWithCounts);
     } catch (error: any) {
@@ -77,15 +72,8 @@ export default function ForumPage() {
 
   const fetchUserLikes = async () => {
     try {
-      const { data, error } = await supabase
-        .from('likes')
-        .select('post_id')
-        .eq('user_id', user?.id)
-        .not('post_id', 'is', null);
-
-      if (error) throw error;
-
-      setUserLikes(new Set(data?.map((like) => like.post_id!) || []));
+      const userReactions = mockReactions.filter(r => r.user_id === currentUser.id && r.is_positive);
+      setUserLikes(new Set(userReactions.map(r => r.post_id)));
     } catch (error) {
       console.error('Error fetching user likes:', error);
     }
@@ -98,27 +86,21 @@ export default function ForumPage() {
       const isLiked = userLikes.has(postId);
 
       if (isLiked) {
-        await supabase
-          .from('likes')
-          .delete()
-          .eq('user_id', user.id)
-          .eq('post_id', postId);
-
         setUserLikes((prev) => {
           const newSet = new Set(prev);
           newSet.delete(postId);
           return newSet;
         });
       } else {
-        await supabase.from('likes').insert({
-          user_id: user.id,
-          post_id: postId,
-        });
-
         setUserLikes((prev) => new Set(prev).add(postId));
       }
 
       fetchPosts();
+
+      toast({
+        title: 'Success',
+        description: isLiked ? 'Removed like' : 'Post liked',
+      });
     } catch (error: any) {
       toast({
         title: 'Error',

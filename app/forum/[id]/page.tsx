@@ -4,7 +4,6 @@ import { useState, useEffect } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { formatDistanceToNow } from 'date-fns';
-import { supabase } from '@/lib/supabase';
 import { useAuth } from '@/context/AuthContext';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader } from '@/components/ui/card';
@@ -14,6 +13,7 @@ import { Textarea } from '@/components/ui/textarea';
 import { Separator } from '@/components/ui/separator';
 import { useToast } from '@/hooks/use-toast';
 import { ArrowLeft, Heart, MessageSquare, Eye, Send, Trash2, Edit } from 'lucide-react';
+import { mockPosts, mockUsers, mockReactions, mockComments, currentUser } from '@/lib/mockData';
 
 export default function PostDetailPage() {
   const params = useParams();
@@ -40,40 +40,32 @@ export default function PostDetailPage() {
 
   const fetchPost = async () => {
     try {
-      const { data, error } = await supabase
-        .from('posts')
-        .select(`
-          *,
-          author:profiles(id, full_name, avatar_url, reputation_points),
-          subject:subjects(name, code)
-        `)
-        .eq('id', postId)
-        .maybeSingle();
+      const postData = mockPosts.find(p => p.id === postId);
 
-      if (error) throw error;
-      if (!data) {
+      if (!postData) {
         router.push('/forum');
         return;
       }
 
-      setPost(data);
+      const author = mockUsers.find(u => u.id === postData.author_id);
+      const reactions = mockReactions.filter(r => r.post_id === postId && r.is_positive);
 
-      const { count: likesCount } = await supabase
-        .from('likes')
-        .select('id', { count: 'exact' })
-        .eq('post_id', postId);
+      setPost({
+        ...postData,
+        author: {
+          id: author?.id,
+          full_name: author?.full_name,
+          avatar_url: author?.avatar_url,
+          reputation_points: author?.point
+        },
+        views: 127
+      });
 
-      setLikesCount(likesCount || 0);
+      setLikesCount(reactions.length);
 
       if (user) {
-        const { data: likeData } = await supabase
-          .from('likes')
-          .select('id')
-          .eq('post_id', postId)
-          .eq('user_id', user.id)
-          .maybeSingle();
-
-        setIsLiked(!!likeData);
+        const userLike = reactions.find(r => r.user_id === currentUser.id);
+        setIsLiked(!!userLike);
       }
     } catch (error: any) {
       toast({
@@ -88,40 +80,29 @@ export default function PostDetailPage() {
 
   const fetchComments = async () => {
     try {
-      const { data, error } = await supabase
-        .from('comments')
-        .select(`
-          *,
-          author:profiles(id, full_name, avatar_url, reputation_points)
-        `)
-        .eq('post_id', postId)
-        .is('parent_id', null)
-        .order('created_at', { ascending: true });
+      const postComments = mockComments
+        .filter(c => c.post_id === postId && !c.parent_comment_id)
+        .map(comment => {
+          const author = mockUsers.find(u => u.id === comment.author_id);
+          return {
+            ...comment,
+            author: {
+              id: author?.id,
+              full_name: author?.full_name,
+              avatar_url: author?.avatar_url,
+              reputation_points: author?.point
+            }
+          };
+        });
 
-      if (error) throw error;
-      setComments(data || []);
+      setComments(postComments);
     } catch (error) {
       console.error('Error fetching comments:', error);
     }
   };
 
   const incrementViews = async () => {
-    try {
-      const { data: currentPost } = await supabase
-        .from('posts')
-        .select('views')
-        .eq('id', postId)
-        .maybeSingle();
-
-      if (currentPost) {
-        await supabase
-          .from('posts')
-          .update({ views: currentPost.views + 1 })
-          .eq('id', postId);
-      }
-    } catch (error) {
-      console.error('Error incrementing views:', error);
-    }
+    console.log('View incremented (mock)');
   };
 
   const handleLike = async () => {
@@ -129,23 +110,17 @@ export default function PostDetailPage() {
 
     try {
       if (isLiked) {
-        await supabase
-          .from('likes')
-          .delete()
-          .eq('user_id', user.id)
-          .eq('post_id', postId);
-
         setIsLiked(false);
         setLikesCount((prev) => prev - 1);
       } else {
-        await supabase.from('likes').insert({
-          user_id: user.id,
-          post_id: postId,
-        });
-
         setIsLiked(true);
         setLikesCount((prev) => prev + 1);
       }
+
+      toast({
+        title: 'Success',
+        description: isLiked ? 'Removed like' : 'Post liked',
+      });
     } catch (error: any) {
       toast({
         title: 'Error',
@@ -162,13 +137,23 @@ export default function PostDetailPage() {
 
     setSubmittingComment(true);
     try {
-      const { error } = await supabase.from('comments').insert({
-        content: newComment,
-        author_id: user.id,
+      const newCommentObj = {
+        id: `comment${Date.now()}`,
         post_id: postId,
-      });
+        author_id: currentUser.id,
+        content: newComment,
+        parent_comment_id: null,
+        created_at: new Date().toISOString(),
+        updated_at: new Date().toISOString(),
+        author: {
+          id: currentUser.id,
+          full_name: currentUser.full_name,
+          avatar_url: currentUser.avatar_url,
+          reputation_points: currentUser.point
+        }
+      };
 
-      if (error) throw error;
+      setComments([...comments, newCommentObj]);
 
       toast({
         title: 'Success',
@@ -176,7 +161,6 @@ export default function PostDetailPage() {
       });
 
       setNewComment('');
-      fetchComments();
     } catch (error: any) {
       toast({
         title: 'Error',
@@ -192,10 +176,6 @@ export default function PostDetailPage() {
     if (!confirm('Are you sure you want to delete this post?')) return;
 
     try {
-      const { error } = await supabase.from('posts').delete().eq('id', postId);
-
-      if (error) throw error;
-
       toast({
         title: 'Success',
         description: 'Post deleted successfully',
