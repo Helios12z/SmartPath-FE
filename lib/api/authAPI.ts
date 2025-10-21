@@ -1,5 +1,5 @@
 import { fetchWrapper } from "@/lib/fetchWrapper";
-import type { DecodedJwt, AuthResponse, LoginRequest, RegisterRequest, UserProfile } from "../types";
+import type { DecodedJwt, AuthResponse, LoginRequest, RegisterRequest} from "../types";
 
 const decodeJWT = (token: string | null | undefined): DecodedJwt | null => {
   if (!token) return null;
@@ -35,7 +35,6 @@ const isExpired = (decoded: DecodedJwt | null): boolean => {
 const isEmail = (s: string) => /\S+@\S+\.\S+/.test(s);
 
 export const authAPI = {
-  /** Login với email hoặc username */
   loginWithIdentifier: async (identifier: string, password: string) => {
     const trimmed = identifier.trim();
     const payload: LoginRequest = {
@@ -45,7 +44,6 @@ export const authAPI = {
     return authAPI.login(payload);
   },
 
-  /** Login chính */
   login: async (payload: LoginRequest) => {
     const res = await fetchWrapper.post<AuthResponse>("/auth/login", payload, false);
 
@@ -69,7 +67,6 @@ export const authAPI = {
     return res;
   },
 
-  /** Register tài khoản mới */
   register: async (payload: RegisterRequest) => {
     const res = await fetchWrapper.post<AuthResponse>("/auth/register", payload, false);
 
@@ -93,7 +90,6 @@ export const authAPI = {
     return res;
   },
 
-  /** Refresh access token */
   refresh: async () => {
     const refreshToken = localStorage.getItem("refresh_token");
     if (!refreshToken) throw new Error("No refresh token found.");
@@ -122,14 +118,12 @@ export const authAPI = {
     return res;
   },
 
-  /** Logout và clear localStorage */
   logout: () => {
     localStorage.removeItem("access_token");
     localStorage.removeItem("refresh_token");
     localStorage.removeItem("user_info");
   },
 
-  /** Kiểm tra đã đăng nhập và token còn hạn không */
   isAuthenticated: (): boolean => {
     const token = localStorage.getItem("access_token");
     const decoded = decodeJWT(token);
@@ -137,11 +131,9 @@ export const authAPI = {
     return true;
   },
 
-  /** Lấy access token hiện tại */
   getToken: () => localStorage.getItem("access_token"),
 
-  /** Lấy thông tin user đã lưu */
-  getUserInfo: <T = Pick<UserProfile, "id" | "email" | "role">>(): T | null => {
+  getUserInfo: <T = { id?: string; email?: string; role?: string }>() => {
     const raw = localStorage.getItem("user_info");
     if (!raw) return null;
     try {
@@ -149,7 +141,7 @@ export const authAPI = {
     } catch {
       return null;
     }
-  },
+  }
 };
 
 export default authAPI;

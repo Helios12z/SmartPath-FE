@@ -137,7 +137,7 @@ export type RegisterRequest = {
   Email: String
   Username: String
   Password: String
-  Fullname: String
+  FullName: String
 }
 
 export type AuthResponse = {

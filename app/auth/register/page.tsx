@@ -3,7 +3,6 @@
 import { useState } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
-import { signUp } from '@/lib/auth';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -11,14 +10,17 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { GraduationCap } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import { useAuth } from '@/context/AuthContext';
+import { authAPI } from '@/lib/api/authAPI';
 
 export default function RegisterPage() {
   const router = useRouter();
   const { toast } = useToast();
   const { refreshProfile } = useAuth();
+
   const [loading, setLoading] = useState(false);
   const [formData, setFormData] = useState({
     fullName: '',
+    username: '',
     email: '',
     password: '',
     confirmPassword: '',
@@ -26,6 +28,16 @@ export default function RegisterPage() {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+
+    // ✅ Kiểm tra dữ liệu cơ bản
+    if (!formData.username.trim()) {
+      toast({
+        title: 'Error',
+        description: 'Username is required',
+        variant: 'destructive',
+      });
+      return;
+    }
 
     if (formData.password !== formData.confirmPassword) {
       toast({
@@ -46,18 +58,29 @@ export default function RegisterPage() {
     }
 
     setLoading(true);
+
     try {
-      await signUp(formData.email, formData.password, formData.fullName);
-      await refreshProfile();
+      // ✅ Gọi API register (có username thật)
+      await authAPI.register({
+        Email: formData.email,
+        Username: formData.username,
+        Password: formData.password,
+        FullName: formData.fullName,
+      });
+
+      await refreshProfile?.();
+
       toast({
         title: 'Success',
         description: 'Account created successfully',
       });
+
       router.push('/forum');
     } catch (error: any) {
+      console.error('Register error:', error);
       toast({
         title: 'Error',
-        description: error.message || 'Failed to create account',
+        description: error?.message || 'Failed to create account',
         variant: 'destructive',
       });
     } finally {
@@ -93,6 +116,20 @@ export default function RegisterPage() {
                 disabled={loading}
               />
             </div>
+
+            <div className="space-y-2">
+              <Label htmlFor="username">Username</Label>
+              <Input
+                id="username"
+                type="text"
+                placeholder="johndoe123"
+                value={formData.username}
+                onChange={(e) => setFormData({ ...formData, username: e.target.value })}
+                required
+                disabled={loading}
+              />
+            </div>
+
             <div className="space-y-2">
               <Label htmlFor="email">Email</Label>
               <Input
@@ -105,6 +142,7 @@ export default function RegisterPage() {
                 disabled={loading}
               />
             </div>
+
             <div className="space-y-2">
               <Label htmlFor="password">Password</Label>
               <Input
@@ -117,6 +155,7 @@ export default function RegisterPage() {
                 disabled={loading}
               />
             </div>
+
             <div className="space-y-2">
               <Label htmlFor="confirmPassword">Confirm Password</Label>
               <Input
@@ -129,10 +168,12 @@ export default function RegisterPage() {
                 disabled={loading}
               />
             </div>
+
             <Button type="submit" className="w-full" disabled={loading}>
               {loading ? 'Creating Account...' : 'Register'}
             </Button>
           </form>
+
           <div className="mt-4 text-center text-sm">
             Already have an account?{' '}
             <Link href="/auth/login" className="text-blue-600 hover:underline dark:text-blue-400">
