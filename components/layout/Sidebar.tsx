@@ -41,7 +41,7 @@ export function Sidebar() {
   ];
 
   return (
-    <aside className="hidden lg:flex w-64 flex-col gap-4 p-4 border-r bg-slate-50/50 dark:bg-slate-950/50 min-h-[calc(100vh-4rem)]">
+    <aside className="hidden lg:flex w-64 flex-col gap-4 p-4 border-r bg-slate-50/50 dark:bg-slate-950/50 min-h-[calc(100vh-4rem)] lg:sticky lg:top-16 lg:h-[calc(100vh-4rem)] lg:overflow-y-auto scrollbar-hide">
       <Card className="p-4">
         <div className="flex items-center gap-3">
           <Avatar className="h-12 w-12">
