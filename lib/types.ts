@@ -143,5 +143,6 @@ export type RegisterRequest = {
 export type AuthResponse = {
   accessToken: string;
   refreshToken: string;
+  currentUserId: string;
 };
 

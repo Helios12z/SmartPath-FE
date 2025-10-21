@@ -47,9 +47,10 @@ export const authAPI = {
   login: async (payload: LoginRequest) => {
     const res = await fetchWrapper.post<AuthResponse>("/auth/login", payload, false);
 
-    if (res?.accessToken && res?.refreshToken) {
+    if (res?.accessToken && res?.refreshToken && res?.currentUserId) {
       localStorage.setItem("access_token", res.accessToken);
       localStorage.setItem("refresh_token", res.refreshToken);
+      localStorage.setItem("currentUserId", res.currentUserId)
 
       const decoded = decodeJWT(res.accessToken);
       if (decoded) {
@@ -57,7 +58,6 @@ export const authAPI = {
           "user_info",
           JSON.stringify({
             id: decoded.sub,
-            email: decoded.email,
             role: decoded.role,
           })
         );
@@ -131,17 +131,7 @@ export const authAPI = {
     return true;
   },
 
-  getToken: () => localStorage.getItem("access_token"),
-
-  getUserInfo: <T = { id?: string; email?: string; role?: string }>() => {
-    const raw = localStorage.getItem("user_info");
-    if (!raw) return null;
-    try {
-      return JSON.parse(raw) as T;
-    } catch {
-      return null;
-    }
-  }
+  getToken: () => localStorage.getItem("access_token")
 };
 
 export default authAPI;

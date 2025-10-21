@@ -96,32 +96,21 @@ export async function signUp(email: string, password: string, fullName: string) 
   };
 }
 
-export async function signIn(email: string, password: string) {
-  const user = mockStore.getStoredUserByEmail(email);
-  if (!user || user.password !== password) {
-    throw new Error('Invalid email or password.');
-  }
-
-  setSessionUserId(user.id);
-
-  return {
-    user: ensureAuthUser(user),
-    profile: sanitizeUserProfile(user),
-  };
-}
-
 export async function signOut() {
   setSessionUserId(null);
 }
 
 export async function getCurrentUser(): Promise<AuthUser | null> {
-  const userId = getSessionUserId();
-  if (!userId) return null;
+  const token = localStorage.getItem('access_token');
+  if (!token) return null;
 
-  const storedUser = mockStore.getStoredUserById(userId);
-  if (!storedUser) return null;
+  const res = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/auth/me`, {
+    headers: { Authorization: `Bearer ${token}` },
+  });
 
-  return ensureAuthUser(storedUser);
+  if (!res.ok) return null;
+  const data = await res.json();
+  return { id: data.id, email: data.email };
 }
 
 export async function getCurrentProfile(): Promise<UserProfile | null> {
