@@ -9,7 +9,7 @@ import { Badge as BadgePill } from '@/components/ui/badge';
 import { Progress } from '@/components/ui/progress';
 import { mockStore } from '@/lib/mockStore';
 import { useAuth } from '@/context/AuthContext';
-import type { UserAchievement } from '@/lib/types';
+import type { Badge, UserAchievement } from '@/lib/types';
 import { Trophy, Medal, Flame, Target } from 'lucide-react';
 
 type BadgeWithStatus = Badge & {

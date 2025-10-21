@@ -25,7 +25,6 @@ export function Sidebar() {
 
   const mainLinks = [
     { href: '/forum', icon: Home, label: 'Home' },
-    { href: '/forum/popular', icon: TrendingUp, label: 'Popular' },
     { href: '/materials', icon: BookOpen, label: 'Materials' },
     { href: '/groups', icon: Users, label: 'Study Groups' },
   ];
