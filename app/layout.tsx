@@ -10,6 +10,9 @@ const inter = Inter({ subsets: ['latin'] });
 export const metadata: Metadata = {
   title: 'SmartPath - Student Learning Platform',
   description: 'A modern academic forum for university students to discuss, learn, and collaborate',
+  icons: {
+    icon: '/favicon.png',
+  },
 };
 
 export default function RootLayout({
