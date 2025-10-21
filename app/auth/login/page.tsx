@@ -3,7 +3,6 @@
 import { useState } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
-import { signIn } from '@/lib/auth';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -11,6 +10,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { GraduationCap } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import { useAuth } from '@/context/AuthContext';
+import { authAPI } from '@/lib/api/authAPI';
 
 export default function LoginPage() {
   const router = useRouter();
@@ -25,15 +25,20 @@ export default function LoginPage() {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setLoading(true);
+
     try {
-      await signIn(formData.email, formData.password);
-      await refreshProfile();
+      await authAPI.loginWithIdentifier(formData.email, formData.password);
+
+      await refreshProfile?.();
+
       toast({
         title: 'Welcome back',
         description: 'You have successfully signed in',
       });
+
       router.push('/forum');
     } catch (error: any) {
+      console.error('Login error:', error);
       toast({
         title: 'Error',
         description: error.message || 'Failed to sign in',
@@ -61,11 +66,11 @@ export default function LoginPage() {
         <CardContent>
           <form onSubmit={handleSubmit} className="space-y-4">
             <div className="space-y-2">
-              <Label htmlFor="email">Email</Label>
+              <Label htmlFor="email">Email or Username</Label>
               <Input
                 id="email"
-                type="email"
-                placeholder="john@university.edu"
+                type="text"
+                placeholder="john@university.edu or johndoe"
                 value={formData.email}
                 onChange={(e) => setFormData({ ...formData, email: e.target.value })}
                 required
@@ -88,6 +93,7 @@ export default function LoginPage() {
               {loading ? 'Signing In...' : 'Sign In'}
             </Button>
           </form>
+
           <div className="mt-4 text-center text-sm">
             Don&apos;t have an account?{' '}
             <Link href="/auth/register" className="text-blue-600 hover:underline dark:text-blue-400">

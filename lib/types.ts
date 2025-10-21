@@ -117,3 +117,31 @@ export interface Subject {
   credits?: number;
   semester?: number;
 }
+
+export type DecodedJwt = {
+  sub?: string;
+  exp?: number;           
+  iat?: number;           
+  nbf?: number;           
+  email?: string;
+  role?: string | string[];
+  [key: string]: any;     
+};
+
+export type LoginRequest = {
+  EmailOrUsername: String
+  Password: String
+}
+
+export type RegisterRequest = {
+  Email: String
+  Username: String
+  Password: String
+  Fullname: String
+}
+
+export type AuthResponse = {
+  accessToken: string;
+  refreshToken: string;
+};
+
