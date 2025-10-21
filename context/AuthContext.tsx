@@ -1,75 +1,88 @@
 'use client';
 
-import { createContext, useContext, useEffect, useState, ReactNode, useCallback } from 'react';
-import type { AuthUser } from '@/lib/auth';
-import { getCurrentProfile, getCurrentUser, updateProfile as updateProfileRequest } from '@/lib/auth';
+import {
+  createContext,
+  useContext,
+  useEffect,
+  useState,
+  ReactNode,
+  useCallback,
+} from 'react';
+
+import { userAPI } from '@/lib/api/userAPI';
+import { signOut } from '@/lib/auth';
 import type { UserProfile } from '@/lib/types';
 
-type UpdatableProfileFields = Partial<
-  Pick<UserProfile, 'full_name' | 'bio' | 'field_of_study' | 'avatar_url' | 'phone_number' | 'username'>
->;
-
+/** Cấu trúc dữ liệu AuthContext */
 interface AuthContextType {
-  user: AuthUser | null;
   profile: UserProfile | null;
   loading: boolean;
-  refreshProfile: () => Promise<UserProfile | null>;
-  updateProfile: (updates: UpdatableProfileFields) => Promise<UserProfile>;
+  refreshProfile: () => Promise<void>;
+  logout: () => Promise<void>;
 }
 
+/** Tạo context với giá trị mặc định an toàn */
 const AuthContext = createContext<AuthContextType>({
-  user: null,
   profile: null,
   loading: true,
-  refreshProfile: async () => null,
-  updateProfile: async () => {
-    throw new Error('AuthProvider not initialized');
-  },
+  refreshProfile: async () => {},
+  logout: async () => {},
 });
 
+/** Provider chính bao quanh toàn bộ app */
 export function AuthProvider({ children }: { children: ReactNode }) {
-  const [user, setUser] = useState<AuthUser | null>(null);
   const [profile, setProfile] = useState<UserProfile | null>(null);
   const [loading, setLoading] = useState(true);
 
+  /**
+   * 🔹 Hàm tải lại thông tin profile từ server dựa trên currentUserId trong localStorage
+   */
   const refreshProfile = useCallback(async () => {
+    setLoading(true);
     try {
-      const [currentUser, currentProfile] = await Promise.all([
-        getCurrentUser(),
-        getCurrentProfile(),
-      ]);
-      setUser(currentUser);
-      setProfile(currentProfile);
-      return currentProfile;
-    } catch (error) {
-      console.error('Error refreshing profile:', error);
-      setUser(null);
+      const currentUserId = localStorage.getItem('currentUserId');
+      if (!currentUserId) {
+        setProfile(null);
+        return;
+      }
+
+      const profileData = await userAPI.getById(currentUserId);
+      setProfile(profileData);
+    } catch (err) {
+      console.error('Error refreshing profile:', err);
       setProfile(null);
-      return null;
     } finally {
       setLoading(false);
     }
   }, []);
 
-  const handleProfileUpdate = useCallback(
-    async (updates: UpdatableProfileFields) => {
-      const updatedProfile = await updateProfileRequest(updates);
-      setProfile(updatedProfile);
-      if (updatedProfile) {
-        setUser((prev) =>
-          prev ? { ...prev, email: updatedProfile.email, id: updatedProfile.id } : prev
-        );
-      }
-      return updatedProfile;
-    },
-    []
-  );
+  /**
+   * 🔹 Hàm logout toàn hệ thống
+   */
+  const logout = useCallback(async () => {
+    try {
+      await signOut();
+    } catch (err) {
+      console.error('Error during logout:', err);
+    } finally {
+      localStorage.removeItem('access_token');
+      localStorage.removeItem('refresh_token');
+      localStorage.removeItem('currentUserId');
+      localStorage.removeItem('user_info');
+      setProfile(null);
+    }
+  }, []);
 
+  /**
+   * 🔹 Tự động refresh profile khi app khởi chạy hoặc localStorage thay đổi
+   */
   useEffect(() => {
     refreshProfile();
 
     const handleStorageChange = (event: StorageEvent) => {
-      if (event.key === 'smartpath_current_user_id') {
+      if (
+        ['currentUserId', 'access_token', 'refresh_token'].includes(event.key || '')
+      ) {
         refreshProfile();
       }
     };
@@ -86,12 +99,15 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, [refreshProfile]);
 
   return (
-    <AuthContext.Provider value={{ user, profile, loading, refreshProfile, updateProfile: handleProfileUpdate }}>
+    <AuthContext.Provider value={{ profile, loading, refreshProfile, logout }}>
       {children}
     </AuthContext.Provider>
   );
 }
 
+/**
+ * Hook tiện dụng để dùng AuthContext trong bất kỳ component nào
+ */
 export const useAuth = () => {
   const context = useContext(AuthContext);
   if (!context) {

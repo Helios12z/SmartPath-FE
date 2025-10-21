@@ -4,7 +4,6 @@ import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
 import { useTheme } from 'next-themes';
 import { useAuth } from '@/context/AuthContext';
-import { signOut } from '@/lib/auth';
 import { Button } from '@/components/ui/button';
 import {
   DropdownMenu,
@@ -15,21 +14,30 @@ import {
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
-import { Bell, Moon, Sun, Search, Menu, GraduationCap, LogOut, User, Settings } from 'lucide-react';
+import {
+  Bell,
+  Moon,
+  Sun,
+  Search,
+  Menu,
+  GraduationCap,
+  LogOut,
+  User,
+  Settings,
+} from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
 import { useToast } from '@/hooks/use-toast';
 
 export function Navbar() {
   const { theme, setTheme } = useTheme();
-  const { user, profile, refreshProfile } = useAuth();
+  const { profile, logout, refreshProfile, loading } = useAuth();
   const pathname = usePathname();
   const router = useRouter();
   const { toast } = useToast();
 
   const handleSignOut = async () => {
     try {
-      await signOut();
-      await refreshProfile();
+      await logout();
       toast({
         title: 'Signed out',
         description: 'You have been successfully signed out',
@@ -63,7 +71,7 @@ export function Navbar() {
               <span className="hidden sm:inline-block">SmartPath</span>
             </Link>
 
-            {user && (
+            {profile && (
               <div className="hidden md:flex items-center gap-1">
                 {navLinks.map((link) => (
                   <Link key={link.href} href={link.href}>
@@ -80,12 +88,13 @@ export function Navbar() {
           </div>
 
           <div className="flex items-center gap-2">
-            {user ? (
+            {profile ? (
               <>
                 <Button variant="ghost" size="icon" className="hidden sm:inline-flex">
                   <Search className="h-5 w-5" />
                 </Button>
 
+                {/* 🔔 Notifications */}
                 <DropdownMenu>
                   <DropdownMenuTrigger asChild>
                     <Button variant="ghost" size="icon" className="relative">
@@ -104,6 +113,7 @@ export function Navbar() {
                   </DropdownMenuContent>
                 </DropdownMenu>
 
+                {/* 🌗 Theme switch */}
                 <Button
                   variant="ghost"
                   size="icon"
@@ -113,13 +123,17 @@ export function Navbar() {
                   <Moon className="absolute h-5 w-5 rotate-90 scale-0 transition-transform dark:rotate-0 dark:scale-100" />
                 </Button>
 
+                {/* 👤 User menu */}
                 <DropdownMenu>
                   <DropdownMenuTrigger asChild>
                     <Button variant="ghost" className="relative h-10 w-10 rounded-full">
                       <Avatar className="h-10 w-10">
-                        <AvatarImage src={profile?.avatar_url ?? undefined} alt={profile?.full_name} />
+                        <AvatarImage
+                          src={profile.avatar_url ?? undefined}
+                          alt={profile.full_name}
+                        />
                         <AvatarFallback>
-                          {profile?.full_name?.charAt(0).toUpperCase() || 'U'}
+                          {profile.full_name?.charAt(0).toUpperCase() || 'U'}
                         </AvatarFallback>
                       </Avatar>
                     </Button>
@@ -127,23 +141,21 @@ export function Navbar() {
                   <DropdownMenuContent align="end">
                     <DropdownMenuLabel>
                       <div className="flex flex-col space-y-1">
-                        <p className="text-sm font-medium">{profile?.full_name}</p>
-                        <p className="text-xs text-muted-foreground">{profile?.email}</p>
-                        {profile && (
-                          <div className="flex items-center gap-2 mt-1">
-                            <Badge variant="secondary" className="text-xs">
-                              {profile.role}
-                            </Badge>
-                            <span className="text-xs text-muted-foreground">
-                              {profile.reputation_points} pts
-                            </span>
-                          </div>
-                        )}
+                        <p className="text-sm font-medium">{profile.full_name}</p>
+                        <p className="text-xs text-muted-foreground">{profile.email}</p>
+                        <div className="flex items-center gap-2 mt-1">
+                          <Badge variant="secondary" className="text-xs">
+                            {profile.role}
+                          </Badge>
+                          <span className="text-xs text-muted-foreground">
+                            {profile.reputation_points} pts
+                          </span>
+                        </div>
                       </div>
                     </DropdownMenuLabel>
                     <DropdownMenuSeparator />
                     <DropdownMenuItem asChild>
-                      <Link href={`/profile/${profile?.id}`} className="cursor-pointer">
+                      <Link href={`/profile/${profile.id}`} className="cursor-pointer">
                         <User className="mr-2 h-4 w-4" />
                         Profile
                       </Link>
@@ -154,7 +166,7 @@ export function Navbar() {
                         Dashboard
                       </Link>
                     </DropdownMenuItem>
-                    {profile?.role === 'admin' && (
+                    {profile.role === 'admin' && (
                       <DropdownMenuItem asChild>
                         <Link href="/admin" className="cursor-pointer">
                           <Settings className="mr-2 h-4 w-4" />
@@ -176,6 +188,7 @@ export function Navbar() {
               </>
             ) : (
               <>
+                {/* 🌗 Theme switch */}
                 <Button
                   variant="ghost"
                   size="icon"
@@ -184,6 +197,8 @@ export function Navbar() {
                   <Sun className="h-5 w-5 rotate-0 scale-100 transition-transform dark:-rotate-90 dark:scale-0" />
                   <Moon className="absolute h-5 w-5 rotate-90 scale-0 transition-transform dark:rotate-0 dark:scale-100" />
                 </Button>
+
+                {/* 🔐 Auth buttons */}
                 <Link href="/auth/login">
                   <Button variant="ghost">Sign In</Button>
                 </Link>

@@ -145,4 +145,3 @@ export type AuthResponse = {
   refreshToken: string;
   currentUserId: string;
 };
-

@@ -29,7 +29,7 @@ export default function LoginPage() {
     try {
       await authAPI.loginWithIdentifier(formData.email, formData.password);
 
-      await refreshProfile?.();
+      await refreshProfile();
 
       toast({
         title: 'Welcome back',
