@@ -5,6 +5,7 @@ import { usePathname } from 'next/navigation';
 import { cn } from '@/lib/utils';
 import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
+import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import {
   Home,
   MessageSquare,
@@ -44,9 +45,12 @@ export function Sidebar() {
     <aside className="hidden lg:flex w-64 flex-col gap-4 p-4 border-r bg-slate-50/50 dark:bg-slate-950/50 min-h-[calc(100vh-4rem)]">
       <Card className="p-4">
         <div className="flex items-center gap-3">
-          <div className="h-12 w-12 rounded-full bg-gradient-to-br from-blue-500 to-blue-600 flex items-center justify-center text-white font-semibold">
-            {profile?.full_name?.charAt(0).toUpperCase() || 'U'}
-          </div>
+          <Avatar className="h-12 w-12">
+            <AvatarImage src={profile?.avatar_url ?? undefined} alt={profile?.full_name} />
+            <AvatarFallback className="bg-gradient-to-br from-blue-500 to-blue-600 text-white font-semibold">
+              {profile?.full_name?.charAt(0).toUpperCase() || 'U'}
+            </AvatarFallback>
+          </Avatar>
           <div className="flex-1 min-w-0">
             <p className="text-sm font-medium truncate">{profile?.full_name}</p>
             <p className="text-xs text-muted-foreground">{profile?.reputation_points} reputation</p>

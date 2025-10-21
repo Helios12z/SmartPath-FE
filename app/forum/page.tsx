@@ -1,7 +1,6 @@
 'use client';
 
-import { useState, useEffect } from 'react';
-import { useRouter } from 'next/navigation';
+import { useState, useEffect, useCallback } from 'react';
 import { useAuth } from '@/context/AuthContext';
 import { PostCard } from '@/components/forum/PostCard';
 import { Button } from '@/components/ui/button';
@@ -11,55 +10,100 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { PlusCircle, Search, TrendingUp, Clock, Filter } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import Link from 'next/link';
-import { mockPosts, mockUsers, mockReactions, mockComments, mockCategoryPost, mockCategories, currentUser } from '@/lib/mockData';
+import { mockStore } from '@/lib/mockStore';
+
+type PostWithMeta = ReturnType<typeof mapPostWithMeta>;
+
+const mapPostWithMeta = (
+  post: ReturnType<typeof mockStore.getPosts>[number],
+  context: {
+    users: ReturnType<typeof mockStore.getUsers>;
+    reactions: ReturnType<typeof mockStore.getReactions>;
+    comments: ReturnType<typeof mockStore.getComments>;
+    categories: ReturnType<typeof mockStore.getCategories>;
+    categoryRelations: ReturnType<typeof mockStore.getCategoryPostRelations>;
+    badgesByUser: Map<string, ReturnType<typeof mockStore.getHighestBadgeForUser>>;
+  }
+) => {
+  const author = context.users.find((user) => user.id === post.author_id);
+  const positiveReactions = context.reactions.filter(
+    (reaction) => reaction.post_id === post.id && reaction.is_positive
+  );
+  const postComments = context.comments.filter((comment) => comment.post_id === post.id);
+  const postCategories = context.categoryRelations
+    .filter((relation) => relation.post_id === post.id)
+    .map((relation) => context.categories.find((category) => category.id === relation.category_id))
+    .filter(Boolean)
+    .map((category) => ({
+      id: category!.id,
+      name: category!.name,
+      color: 'blue',
+    }));
+
+  return {
+    ...post,
+    author: author
+      ? {
+          id: author.id,
+          full_name: author.full_name,
+          avatar_url: author.avatar_url,
+          reputation_points: author.reputation_points,
+          primaryBadge: context.badgesByUser.get(author.id) ?? null,
+        }
+      : {
+          id: post.author_id,
+          full_name: 'Unknown User',
+          avatar_url: null,
+          reputation_points: 0,
+          primaryBadge: null,
+        },
+    likes_count: positiveReactions.length,
+    comments_count: postComments.length,
+    tags: postCategories,
+  };
+};
+
+const generateId = () => {
+  if (typeof crypto !== 'undefined' && 'randomUUID' in crypto) {
+    return crypto.randomUUID();
+  }
+  return Math.random().toString(36).slice(2, 10);
+};
 
 export default function ForumPage() {
-  const router = useRouter();
   const { user } = useAuth();
   const { toast } = useToast();
-  const [posts, setPosts] = useState<any[]>([]);
+  const [posts, setPosts] = useState<PostWithMeta[]>([]);
   const [loading, setLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState('');
   const [userLikes, setUserLikes] = useState<Set<string>>(new Set());
 
-  useEffect(() => {
-    fetchPosts();
-    if (user) {
-      fetchUserLikes();
-    }
-  }, [user]);
-
-  const fetchPosts = async () => {
+  const fetchPosts = useCallback(() => {
     try {
-      const postsWithCounts = mockPosts.map((post) => {
-        const author = mockUsers.find(u => u.id === post.author_id);
-        const reactions = mockReactions.filter(r => r.post_id === post.id);
-        const comments = mockComments.filter(c => c.post_id === post.id);
-        const postCategories = mockCategoryPost
-          .filter(cp => cp.post_id === post.id)
-          .map(cp => mockCategories.find(cat => cat.id === cp.category_id))
-          .filter(Boolean);
+      const context = {
+        users: mockStore.getUsers(),
+        reactions: mockStore.getReactions(),
+        comments: mockStore.getComments(),
+        categories: mockStore.getCategories(),
+        categoryRelations: mockStore.getCategoryPostRelations(),
+        badgesByUser: new Map<string, ReturnType<typeof mockStore.getHighestBadgeForUser>>(),
+      };
 
-        return {
-          ...post,
-          author: {
-            id: author?.id,
-            full_name: author?.full_name,
-            avatar_url: author?.avatar_url,
-            reputation_points: author?.point
-          },
-          likes_count: reactions.filter(r => r.is_positive).length,
-          comments_count: comments.length,
-          tags: postCategories.map(cat => ({
-            id: cat?.id,
-            name: cat?.name,
-            color: 'blue'
-          }))
-        };
+      context.users.forEach((user) => {
+        context.badgesByUser.set(user.id, mockStore.getHighestBadgeForUser(user.id));
       });
 
-      setPosts(postsWithCounts);
-    } catch (error: any) {
+      const postsWithMeta = mockStore
+        .getPosts()
+        .sort(
+          (a, b) =>
+            new Date(b.created_at).getTime() - new Date(a.created_at).getTime()
+        )
+        .map((post) => mapPostWithMeta(post, context));
+
+      setPosts(postsWithMeta);
+    } catch (error) {
+      console.error('Failed to load posts:', error);
       toast({
         title: 'Error',
         description: 'Failed to load posts',
@@ -68,46 +112,79 @@ export default function ForumPage() {
     } finally {
       setLoading(false);
     }
-  };
+  }, [toast]);
 
-  const fetchUserLikes = async () => {
+  const fetchUserLikes = useCallback(() => {
     try {
-      const userReactions = mockReactions.filter(r => r.user_id === currentUser.id && r.is_positive);
-      setUserLikes(new Set(userReactions.map(r => r.post_id)));
+      const userReactions = mockStore
+        .getReactions()
+        .filter((reaction) => reaction.user_id === user?.id && reaction.is_positive);
+
+      setUserLikes(new Set(userReactions.map((reaction) => reaction.post_id)));
     } catch (error) {
       console.error('Error fetching user likes:', error);
     }
-  };
+  }, [user]);
 
-  const handleLike = async (postId: string) => {
-    if (!user) return;
+  useEffect(() => {
+    fetchPosts();
+  }, [fetchPosts]);
 
-    try {
-      const isLiked = userLikes.has(postId);
+  useEffect(() => {
+    if (user) {
+      fetchUserLikes();
+    } else {
+      setUserLikes(new Set());
+    }
+  }, [user, fetchUserLikes]);
 
-      if (isLiked) {
-        setUserLikes((prev) => {
-          const newSet = new Set(prev);
-          newSet.delete(postId);
-          return newSet;
-        });
-      } else {
-        setUserLikes((prev) => new Set(prev).add(postId));
-      }
-
-      fetchPosts();
-
+  const handleLike = (postId: string) => {
+    if (!user) {
       toast({
-        title: 'Success',
-        description: isLiked ? 'Removed like' : 'Post liked',
-      });
-    } catch (error: any) {
-      toast({
-        title: 'Error',
-        description: error.message || 'Failed to update like',
+        title: 'Sign in required',
+        description: 'Please sign in to like posts.',
         variant: 'destructive',
       });
+      return;
     }
+
+    const reactions = mockStore.getReactions();
+    const existingReaction = reactions.find(
+      (reaction) =>
+        reaction.post_id === postId &&
+        reaction.user_id === user.id &&
+        reaction.is_positive
+    );
+
+    if (existingReaction) {
+      mockStore.removeReaction(
+        (reaction) => reaction.id === existingReaction.id
+      );
+      setUserLikes((prev) => {
+        const next = new Set(prev);
+        next.delete(postId);
+        return next;
+      });
+      toast({
+        title: 'Success',
+        description: 'Removed like',
+      });
+    } else {
+      mockStore.addReaction({
+        id: generateId(),
+        post_id: postId,
+        user_id: user.id,
+        is_positive: true,
+        created_at: new Date().toISOString(),
+      });
+      setUserLikes((prev) => new Set(prev).add(postId));
+      toast({
+        title: 'Success',
+        description: 'Post liked',
+      });
+    }
+
+    fetchPosts();
   };
 
   const filteredPosts = posts.filter((post) =>

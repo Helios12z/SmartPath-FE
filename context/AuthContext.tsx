@@ -1,66 +1,92 @@
 'use client';
 
-import { createContext, useContext, useEffect, useState, ReactNode } from 'react';
-import { User } from '@supabase/supabase-js';
-import { supabase, Profile } from '@/lib/supabase';
-import { getCurrentProfile } from '@/lib/auth';
+import { createContext, useContext, useEffect, useState, ReactNode, useCallback } from 'react';
+import type { AuthUser } from '@/lib/auth';
+import { getCurrentProfile, getCurrentUser, updateProfile as updateProfileRequest } from '@/lib/auth';
+import type { UserProfile } from '@/lib/types';
+
+type UpdatableProfileFields = Partial<
+  Pick<UserProfile, 'full_name' | 'bio' | 'field_of_study' | 'avatar_url' | 'phone_number' | 'username'>
+>;
 
 interface AuthContextType {
-  user: User | null;
-  profile: Profile | null;
+  user: AuthUser | null;
+  profile: UserProfile | null;
   loading: boolean;
-  refreshProfile: () => Promise<void>;
+  refreshProfile: () => Promise<UserProfile | null>;
+  updateProfile: (updates: UpdatableProfileFields) => Promise<UserProfile>;
 }
 
 const AuthContext = createContext<AuthContextType>({
   user: null,
   profile: null,
   loading: true,
-  refreshProfile: async () => {},
+  refreshProfile: async () => null,
+  updateProfile: async () => {
+    throw new Error('AuthProvider not initialized');
+  },
 });
 
 export function AuthProvider({ children }: { children: ReactNode }) {
-  const [user, setUser] = useState<User | null>(null);
-  const [profile, setProfile] = useState<Profile | null>(null);
+  const [user, setUser] = useState<AuthUser | null>(null);
+  const [profile, setProfile] = useState<UserProfile | null>(null);
   const [loading, setLoading] = useState(true);
 
-  const refreshProfile = async () => {
+  const refreshProfile = useCallback(async () => {
     try {
-      const profileData = await getCurrentProfile();
-      setProfile(profileData);
+      const [currentUser, currentProfile] = await Promise.all([
+        getCurrentUser(),
+        getCurrentProfile(),
+      ]);
+      setUser(currentUser);
+      setProfile(currentProfile);
+      return currentProfile;
     } catch (error) {
       console.error('Error refreshing profile:', error);
-    }
-  };
-
-  useEffect(() => {
-    supabase.auth.getSession().then(({ data: { session } }) => {
-      setUser(session?.user ?? null);
-      if (session?.user) {
-        refreshProfile();
-      }
+      setUser(null);
+      setProfile(null);
+      return null;
+    } finally {
       setLoading(false);
-    });
-
-    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
-      (() => {
-        (async () => {
-          setUser(session?.user ?? null);
-          if (session?.user) {
-            await refreshProfile();
-          } else {
-            setProfile(null);
-          }
-          setLoading(false);
-        })();
-      })();
-    });
-
-    return () => subscription.unsubscribe();
+    }
   }, []);
 
+  const handleProfileUpdate = useCallback(
+    async (updates: UpdatableProfileFields) => {
+      const updatedProfile = await updateProfileRequest(updates);
+      setProfile(updatedProfile);
+      if (updatedProfile) {
+        setUser((prev) =>
+          prev ? { ...prev, email: updatedProfile.email, id: updatedProfile.id } : prev
+        );
+      }
+      return updatedProfile;
+    },
+    []
+  );
+
+  useEffect(() => {
+    refreshProfile();
+
+    const handleStorageChange = (event: StorageEvent) => {
+      if (event.key === 'smartpath_current_user_id') {
+        refreshProfile();
+      }
+    };
+
+    if (typeof window !== 'undefined') {
+      window.addEventListener('storage', handleStorageChange);
+    }
+
+    return () => {
+      if (typeof window !== 'undefined') {
+        window.removeEventListener('storage', handleStorageChange);
+      }
+    };
+  }, [refreshProfile]);
+
   return (
-    <AuthContext.Provider value={{ user, profile, loading, refreshProfile }}>
+    <AuthContext.Provider value={{ user, profile, loading, refreshProfile, updateProfile: handleProfileUpdate }}>
       {children}
     </AuthContext.Provider>
   );

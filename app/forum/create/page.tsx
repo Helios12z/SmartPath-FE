@@ -2,7 +2,6 @@
 
 import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
-import { supabase } from '@/lib/supabase';
 import { useAuth } from '@/context/AuthContext';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -13,13 +12,22 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { useToast } from '@/hooks/use-toast';
 import { ArrowLeft } from 'lucide-react';
 import Link from 'next/link';
+import { mockStore } from '@/lib/mockStore';
+import type { Subject } from '@/lib/types';
+
+const generateId = () => {
+  if (typeof crypto !== 'undefined' && 'randomUUID' in crypto) {
+    return crypto.randomUUID();
+  }
+  return Math.random().toString(36).slice(2, 10);
+};
 
 export default function CreatePostPage() {
   const router = useRouter();
   const { user } = useAuth();
   const { toast } = useToast();
   const [loading, setLoading] = useState(false);
-  const [subjects, setSubjects] = useState<any[]>([]);
+  const [subjects, setSubjects] = useState<Subject[]>([]);
   const [formData, setFormData] = useState({
     title: '',
     content: '',
@@ -27,27 +35,24 @@ export default function CreatePostPage() {
   });
 
   useEffect(() => {
-    fetchSubjects();
+    const subjectList = mockStore
+      .getSubjects()
+      .sort((a, b) => a.name.localeCompare(b.name));
+    setSubjects(subjectList);
   }, []);
 
-  const fetchSubjects = async () => {
-    try {
-      const { data, error } = await supabase
-        .from('subjects')
-        .select('*')
-        .order('name');
+  const handleSubmit = (event: React.FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
 
-      if (error) throw error;
-      setSubjects(data || []);
-    } catch (error) {
-      console.error('Error fetching subjects:', error);
+    if (!user) {
+      toast({
+        title: 'Sign in required',
+        description: 'Please sign in to create a post.',
+        variant: 'destructive',
+      });
+      router.push('/auth/login');
+      return;
     }
-  };
-
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
-
-    if (!user) return;
 
     if (!formData.title.trim() || !formData.content.trim()) {
       toast({
@@ -59,30 +64,34 @@ export default function CreatePostPage() {
     }
 
     setLoading(true);
-    try {
-      const { data, error } = await supabase
-        .from('posts')
-        .insert({
-          title: formData.title,
-          content: formData.content,
-          author_id: user.id,
-          subject_id: formData.subject_id || null,
-        })
-        .select()
-        .single();
 
-      if (error) throw error;
+    try {
+      const timestamp = new Date().toISOString();
+      const newPost = {
+        id: generateId(),
+        author_id: user.id,
+        title: formData.title.trim(),
+        content: formData.content.trim(),
+        is_question: formData.title.trim().endsWith('?'),
+        created_at: timestamp,
+        updated_at: timestamp,
+        is_deleted_at: null,
+        subject_id: formData.subject_id || null,
+      };
+
+      mockStore.addPost(newPost);
 
       toast({
         title: 'Success',
         description: 'Post created successfully',
       });
 
-      router.push(`/forum/${data.id}`);
-    } catch (error: any) {
+      router.push(`/forum/${newPost.id}`);
+    } catch (error) {
+      console.error('Failed to create post', error);
       toast({
         title: 'Error',
-        description: error.message || 'Failed to create post',
+        description: 'Failed to create post.',
         variant: 'destructive',
       });
     } finally {

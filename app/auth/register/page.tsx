@@ -10,10 +10,12 @@ import { Label } from '@/components/ui/label';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { GraduationCap } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
+import { useAuth } from '@/context/AuthContext';
 
 export default function RegisterPage() {
   const router = useRouter();
   const { toast } = useToast();
+  const { refreshProfile } = useAuth();
   const [loading, setLoading] = useState(false);
   const [formData, setFormData] = useState({
     fullName: '',
@@ -46,6 +48,7 @@ export default function RegisterPage() {
     setLoading(true);
     try {
       await signUp(formData.email, formData.password, formData.fullName);
+      await refreshProfile();
       toast({
         title: 'Success',
         description: 'Account created successfully',
