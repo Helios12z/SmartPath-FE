@@ -10,10 +10,12 @@ import { Label } from '@/components/ui/label';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { GraduationCap } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
+import { useAuth } from '@/context/AuthContext';
 
 export default function LoginPage() {
   const router = useRouter();
   const { toast } = useToast();
+  const { refreshProfile } = useAuth();
   const [loading, setLoading] = useState(false);
   const [formData, setFormData] = useState({
     email: '',
@@ -25,6 +27,7 @@ export default function LoginPage() {
     setLoading(true);
     try {
       await signIn(formData.email, formData.password);
+      await refreshProfile();
       toast({
         title: 'Welcome back',
         description: 'You have successfully signed in',

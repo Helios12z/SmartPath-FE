@@ -8,7 +8,7 @@ import { Toaster } from '@/components/ui/toaster';
 const inter = Inter({ subsets: ['latin'] });
 
 export const metadata: Metadata = {
-  title: 'AcademicHub - Student Learning Platform',
+  title: 'SmartPath - Student Learning Platform',
   description: 'A modern academic forum for university students to discuss, learn, and collaborate',
 };
 

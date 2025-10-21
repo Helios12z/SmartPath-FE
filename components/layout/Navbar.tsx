@@ -21,7 +21,7 @@ import { useToast } from '@/hooks/use-toast';
 
 export function Navbar() {
   const { theme, setTheme } = useTheme();
-  const { user, profile } = useAuth();
+  const { user, profile, refreshProfile } = useAuth();
   const pathname = usePathname();
   const router = useRouter();
   const { toast } = useToast();
@@ -29,6 +29,7 @@ export function Navbar() {
   const handleSignOut = async () => {
     try {
       await signOut();
+      await refreshProfile();
       toast({
         title: 'Signed out',
         description: 'You have been successfully signed out',
@@ -59,7 +60,7 @@ export function Navbar() {
               <div className="p-1.5 bg-blue-500 rounded-lg">
                 <GraduationCap className="h-5 w-5 text-white" />
               </div>
-              <span className="hidden sm:inline-block">AcademicHub</span>
+              <span className="hidden sm:inline-block">SmartPath</span>
             </Link>
 
             {user && (
@@ -116,7 +117,7 @@ export function Navbar() {
                   <DropdownMenuTrigger asChild>
                     <Button variant="ghost" className="relative h-10 w-10 rounded-full">
                       <Avatar className="h-10 w-10">
-                        <AvatarImage src={profile?.avatar_url} alt={profile?.full_name} />
+                        <AvatarImage src={profile?.avatar_url ?? undefined} alt={profile?.full_name} />
                         <AvatarFallback>
                           {profile?.full_name?.charAt(0).toUpperCase() || 'U'}
                         </AvatarFallback>

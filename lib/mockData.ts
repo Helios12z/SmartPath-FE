@@ -6,13 +6,17 @@ export const mockUsers = [
     phone_number: '+1234567890',
     full_name: 'John Doe',
     major: 'Computer Science',
+    field_of_study: 'Computer Science',
     faculty: 'Engineering',
     year_of_study: 3,
     bio: 'Passionate about web development and AI. Love helping fellow students with programming questions.',
-    avatar_url: 'https://images.pexels.com/photos/220453/pexels-photo-220453.jpeg?auto=compress&cs=tinysrgb&w=150',
+    avatar_url: 'https://i.pinimg.com/736x/3f/af/eb/3fafebef8349265f7d82174b1580b90d.jpg',
     role: 'student',
     point: 450,
-    created_at: '2024-01-15T10:00:00Z'
+    reputation_points: 450,
+    password: 'password123',
+    created_at: '2024-01-15T10:00:00Z',
+    updated_at: '2025-10-16T12:00:00Z'
   },
   {
     id: '2',
@@ -21,13 +25,17 @@ export const mockUsers = [
     phone_number: '+1234567891',
     full_name: 'Sarah Smith',
     major: 'Data Science',
+    field_of_study: 'Data Science',
     faculty: 'Engineering',
     year_of_study: 2,
     bio: 'Machine learning enthusiast. Always ready to discuss algorithms and data analysis.',
     avatar_url: 'https://images.pexels.com/photos/415829/pexels-photo-415829.jpeg?auto=compress&cs=tinysrgb&w=150',
     role: 'student',
     point: 320,
-    created_at: '2024-02-20T10:00:00Z'
+    reputation_points: 320,
+    password: 'password123',
+    created_at: '2024-02-20T10:00:00Z',
+    updated_at: '2025-09-10T08:15:00Z'
   },
   {
     id: '3',
@@ -36,13 +44,17 @@ export const mockUsers = [
     phone_number: '+1234567892',
     full_name: 'Mike Johnson',
     major: 'Software Engineering',
+    field_of_study: 'Software Engineering',
     faculty: 'Engineering',
     year_of_study: 4,
     bio: 'Senior year student. Interested in cloud architecture and DevOps.',
     avatar_url: 'https://images.pexels.com/photos/1222271/pexels-photo-1222271.jpeg?auto=compress&cs=tinysrgb&w=150',
     role: 'student',
     point: 680,
-    created_at: '2024-01-10T10:00:00Z'
+    reputation_points: 680,
+    password: 'password123',
+    created_at: '2024-01-10T10:00:00Z',
+    updated_at: '2025-08-22T14:45:00Z'
   },
   {
     id: '4',
@@ -51,13 +63,17 @@ export const mockUsers = [
     phone_number: '+1234567893',
     full_name: 'Dr. Emily Wilson',
     major: 'Computer Science',
+    field_of_study: 'Computer Science',
     faculty: 'Engineering',
     year_of_study: null,
     bio: 'Associate Professor of Computer Science. Specializing in Algorithms and Data Structures.',
     avatar_url: 'https://images.pexels.com/photos/774909/pexels-photo-774909.jpeg?auto=compress&cs=tinysrgb&w=150',
     role: 'lecturer',
-    point: 0,
-    created_at: '2023-08-01T10:00:00Z'
+    point: 900,
+    reputation_points: 900,
+    password: 'password123',
+    created_at: '2023-08-01T10:00:00Z',
+    updated_at: '2025-06-30T09:05:00Z'
   },
   {
     id: '5',
@@ -66,13 +82,17 @@ export const mockUsers = [
     phone_number: '+1234567894',
     full_name: 'Emma Davis',
     major: 'Information Systems',
+    field_of_study: 'Information Systems',
     faculty: 'Engineering',
     year_of_study: 1,
     bio: 'Freshman exploring the world of tech. Eager to learn and contribute!',
     avatar_url: 'https://images.pexels.com/photos/1239291/pexels-photo-1239291.jpeg?auto=compress&cs=tinysrgb&w=150',
     role: 'student',
     point: 120,
-    created_at: '2024-09-01T10:00:00Z'
+    reputation_points: 120,
+    password: 'password123',
+    created_at: '2024-09-01T10:00:00Z',
+    updated_at: '2025-10-01T10:30:00Z'
   }
 ];
 
@@ -85,6 +105,41 @@ export const mockCategories = [
   { id: 'cat6', name: 'Study Tips' },
   { id: 'cat7', name: 'Project Help' },
   { id: 'cat8', name: 'General Discussion' }
+];
+
+export const mockSubjects = [
+  {
+    id: 'subject1',
+    code: 'CS101',
+    name: 'Introduction to Computer Science',
+    description: 'Foundational concepts in computing, problem solving, and programming.',
+    credits: 3,
+    semester: 1
+  },
+  {
+    id: 'subject2',
+    code: 'CS204',
+    name: 'Data Structures & Algorithms',
+    description: 'Covers core data structures, algorithm analysis, and performance optimization.',
+    credits: 4,
+    semester: 3
+  },
+  {
+    id: 'subject3',
+    code: 'DS210',
+    name: 'Applied Machine Learning',
+    description: 'Hands-on course exploring supervised and unsupervised learning techniques.',
+    credits: 4,
+    semester: 4
+  },
+  {
+    id: 'subject4',
+    code: 'IT150',
+    name: 'Web Development Fundamentals',
+    description: 'Front-end and back-end fundamentals with modern tooling and frameworks.',
+    credits: 3,
+    semester: 2
+  }
 ];
 
 export const mockPosts = [
@@ -428,10 +483,85 @@ export const mockNotifications = [
 ];
 
 export const mockBadges = [
-  { id: 'badge1', point: 100, name: 'Newcomer' },
-  { id: 'badge2', point: 250, name: 'Contributor' },
-  { id: 'badge3', point: 500, name: 'Expert' },
-  { id: 'badge4', point: 1000, name: 'Master' }
+  { id: 'badge1', point: 100, name: 'Newcomer', description: 'First steps into the community.' },
+  { id: 'badge2', point: 250, name: 'Contributor', description: 'Consistent participation in discussions.' },
+  { id: 'badge3', point: 500, name: 'Expert', description: 'Recognized as a go-to problem solver.' },
+  { id: 'badge4', point: 1000, name: 'Master', description: 'Top 1% of the SmartPath community.' }
+];
+
+export const mockEvents = [
+  {
+    id: 'event1',
+    title: 'AI Study Jam: Building with LLMs',
+    description: 'Hands-on workshop exploring real-world use cases for large language models with guided projects.',
+    location: 'Innovation Lab, Building C',
+    start_at: '2025-10-18T14:00:00Z',
+    end_at: '2025-10-18T17:00:00Z',
+    category: 'Workshop',
+    host_id: '4',
+    banner_url: 'https://images.pexels.com/photos/3861969/pexels-photo-3861969.jpeg?auto=compress&cs=tinysrgb&w=640',
+    capacity: 40,
+    attendees_count: 28,
+    is_virtual: false
+  },
+  {
+    id: 'event2',
+    title: 'Tech Career Panel: From Campus to Big Tech',
+    description: 'Hear from recent alumni who landed roles at leading technology companies and learn their strategies.',
+    location: 'Auditorium A / Live Stream',
+    start_at: '2025-10-20T09:00:00Z',
+    end_at: '2025-10-20T11:00:00Z',
+    category: 'Panel',
+    host_id: '4',
+    banner_url: 'https://images.pexels.com/photos/3182756/pexels-photo-3182756.jpeg?auto=compress&cs=tinysrgb&w=640',
+    capacity: 120,
+    attendees_count: 95,
+    is_virtual: true
+  },
+  {
+    id: 'event3',
+    title: 'Hackathon Kick-off: Smart Campus Solutions',
+    description: '48-hour hackathon focused on creating apps that improve campus life. Kick-off with team formation and ideation.',
+    location: 'Makerspace, Building D',
+    start_at: '2025-10-22T18:00:00Z',
+    end_at: '2025-10-24T18:00:00Z',
+    category: 'Hackathon',
+    host_id: '3',
+    banner_url: 'https://images.pexels.com/photos/1181359/pexels-photo-1181359.jpeg?auto=compress&cs=tinysrgb&w=640',
+    capacity: 80,
+    attendees_count: 64,
+    is_virtual: false
+  },
+  {
+    id: 'event4',
+    title: 'Design Thinking Crash Course',
+    description: 'Interactive session on design thinking principles with breakout activities and real-world case studies.',
+    location: 'Design Studio, Building B',
+    start_at: '2025-09-28T13:00:00Z',
+    end_at: '2025-09-28T15:30:00Z',
+    category: 'Workshop',
+    host_id: '2',
+    banner_url: 'https://images.pexels.com/photos/3184300/pexels-photo-3184300.jpeg?auto=compress&cs=tinysrgb&w=640',
+    capacity: 50,
+    attendees_count: 50,
+    is_virtual: false
+  }
+];
+
+export const mockEventRegistrations = [
+  { id: 'reg1', event_id: 'event1', user_id: '1', status: 'going', created_at: '2025-10-10T10:00:00Z' },
+  { id: 'reg2', event_id: 'event2', user_id: '1', status: 'interested', created_at: '2025-10-11T09:15:00Z' },
+  { id: 'reg3', event_id: 'event3', user_id: '2', status: 'going', created_at: '2025-10-12T15:20:00Z' },
+  { id: 'reg4', event_id: 'event3', user_id: '3', status: 'going', created_at: '2025-10-12T15:25:00Z' },
+  { id: 'reg5', event_id: 'event4', user_id: '5', status: 'going', created_at: '2025-09-20T08:30:00Z' }
+];
+
+export const mockUserAchievements = [
+  { id: 'ua1', user_id: '1', badge_id: 'badge1', awarded_at: '2025-02-15T09:00:00Z', note: 'Earned 100 reputation points.' },
+  { id: 'ua2', user_id: '1', badge_id: 'badge2', awarded_at: '2025-05-01T12:00:00Z', note: 'Consistent community support.' },
+  { id: 'ua3', user_id: '2', badge_id: 'badge1', awarded_at: '2025-03-10T15:45:00Z' },
+  { id: 'ua4', user_id: '3', badge_id: 'badge1', awarded_at: '2025-01-22T11:10:00Z' },
+  { id: 'ua5', user_id: '3', badge_id: 'badge2', awarded_at: '2025-06-05T09:30:00Z' }
 ];
 
 export function getPostWithDetails(postId: string) {
