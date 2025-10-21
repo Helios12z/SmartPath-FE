@@ -1,15 +1,5 @@
 import { fetchWrapper } from "@/lib/fetchWrapper";
-import type { UserProfile } from "@/lib/types";
-
-export interface UserRequestDto {
-  email: string;
-  username: string;
-  full_name?: string;
-  phone_number?: string;
-  field_of_study?: string;
-  avatar_url?: string;
-  role?: string;
-}
+import type { UserProfile, UserRequestDto } from "@/lib/types";
 
 export const userAPI = {
 
