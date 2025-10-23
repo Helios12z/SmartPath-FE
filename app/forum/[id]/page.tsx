@@ -27,6 +27,15 @@ import { Separator } from '@/components/ui/separator';
 import { ArrowLeft, Heart, MessageSquare, Send, Trash2, Edit, FileText, Download } from 'lucide-react';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 
+const toHttpUrl = (u: string) => {
+  if (!u) return u;
+  const trimmed = u.trim();
+  if (/^https?:\/\//i.test(trimmed)) return trimmed;
+  if (/^\/\//.test(trimmed)) return `https:${trimmed}`;
+  return `https://${trimmed.replace(/^\/+/, '')}`;
+};
+
+
 const getExt = (url: string) => {
   try {
     const u = new URL(url);
@@ -285,7 +294,7 @@ export default function PostDetailPage() {
                       </div>
                       <div className="shrink-0">
                         <a
-                          href={doc.fileUrl}
+                          href={toHttpUrl(doc.fileUrl)}
                           target="_blank"
                           rel="noopener noreferrer"
                           download
