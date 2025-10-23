@@ -13,7 +13,6 @@ import { userAPI } from '@/lib/api/userAPI';
 import { signOut } from '@/lib/auth';
 import type { UserProfile } from '@/lib/types';
 
-/** Cấu trúc dữ liệu AuthContext */
 interface AuthContextType {
   profile: UserProfile | null;
   loading: boolean;
@@ -21,7 +20,6 @@ interface AuthContextType {
   logout: () => Promise<void>;
 }
 
-/** Tạo context với giá trị mặc định an toàn */
 const AuthContext = createContext<AuthContextType>({
   profile: null,
   loading: true,
@@ -29,14 +27,10 @@ const AuthContext = createContext<AuthContextType>({
   logout: async () => {},
 });
 
-/** Provider chính bao quanh toàn bộ app */
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [profile, setProfile] = useState<UserProfile | null>(null);
   const [loading, setLoading] = useState(true);
 
-  /**
-   * 🔹 Hàm tải lại thông tin profile từ server dựa trên currentUserId trong localStorage
-   */
   const refreshProfile = useCallback(async () => {
     setLoading(true);
     try {
@@ -56,9 +50,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }
   }, []);
 
-  /**
-   * 🔹 Hàm logout toàn hệ thống
-   */
   const logout = useCallback(async () => {
     try {
       await signOut();
@@ -73,9 +64,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }
   }, []);
 
-  /**
-   * 🔹 Tự động refresh profile khi app khởi chạy hoặc localStorage thay đổi
-   */
   useEffect(() => {
     refreshProfile();
 
@@ -105,9 +93,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   );
 }
 
-/**
- * Hook tiện dụng để dùng AuthContext trong bất kỳ component nào
- */
 export const useAuth = () => {
   const context = useContext(AuthContext);
   if (!context) {

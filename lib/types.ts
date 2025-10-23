@@ -47,40 +47,43 @@ export type AuthResponse = {
   currentUserId: string;
 };
 
-export interface ForumPost {
+export interface PostResponseDto {
   id: string;
-  author_id: string;
   title: string;
   content: string;
-  is_question: boolean;
-  created_at: string;
-  updated_at: string;
-  is_deleted_at?: string | null;
-  subject_id?: string | null;
-  views?: number;
+  isQuestion: boolean;
+  createdAt: string;            
+  updatedAt?: string | null;
+  authorUsername?: string | null;
+  authorId: string;
+  authorAvatarUrl?: string | null;
+  reactionCount: number;
+  commentCount: number;
+  categories?: string[];
 }
 
 export interface PostRequestDto {
   title: string;
   content: string;
-  is_question: boolean;
-  subject_id?: string;
-}
-
-export interface Comment {
-  id: string;
-  post_id: string;
-  author_id: string;
-  content: string;
-  parent_comment_id?: string | null;
-  created_at: string;
-  updated_at: string;
+  isQuestion: boolean;
+  categoryIds?: string[];
 }
 
 export interface CommentRequestDto {
-  post_id: string;
+  postId: string;
   content: string;
-  parent_comment_id?: string | null;
+  parentCommentId?: string | null;
+}
+
+export interface CommentResponseDto {
+  id: string;
+  content: string;
+  authorId: string;
+  authorUsername: string;
+  authorAvatarUrl?: string | null;
+  authorPoint: number;
+  createdAt: string;               
+  replies?: CommentResponseDto[];  
 }
 
 export interface Reaction {

@@ -2,98 +2,198 @@
 
 import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
+import Link from 'next/link';
+
 import { useAuth } from '@/context/AuthContext';
+import { useToast } from '@/hooks/use-toast';
+
+import { postAPI } from '@/lib/api/postAPI';
+import { categoryAPI } from '@/lib/api/categoryAPI';
+import { materialAPI } from '@/lib/api/materialAPI';
+
+import { Progress } from '@/components/ui/progress';
+import { ScrollArea } from '@/components/ui/scroll-area';
+import { X, ImagePlus, FilePlus2, FileText, Trash2, UploadCloud, ArrowLeft } from 'lucide-react';
+
+import type { PostRequestDto } from '@/lib/types';
+
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { useToast } from '@/hooks/use-toast';
-import { ArrowLeft } from 'lucide-react';
-import Link from 'next/link';
-import { mockStore } from '@/lib/mockStore';
-import type { Subject } from '@/lib/types';
+import { Checkbox } from '@/components/ui/checkbox';
 
-const generateId = () => {
-  if (typeof crypto !== 'undefined' && 'randomUUID' in crypto) {
-    return crypto.randomUUID();
-  }
-  return Math.random().toString(36).slice(2, 10);
-};
+type UICategory = { id: string; name: string };
+type QueuedImage = { id: string; file: File; preview: string };
+type QueuedDoc = { id: string; file: File };
+
+const uid = () => Math.random().toString(36).slice(2);
 
 export default function CreatePostPage() {
   const router = useRouter();
-  const { user } = useAuth();
+  const { profile } = useAuth();
   const { toast } = useToast();
+
   const [loading, setLoading] = useState(false);
-  const [subjects, setSubjects] = useState<Subject[]>([]);
-  const [formData, setFormData] = useState({
-    title: '',
-    content: '',
-    subject_id: '',
-  });
+  const [categories, setCategories] = useState<UICategory[]>([]);
+  const [selectedCategoryIds, setSelectedCategoryIds] = useState<string[]>([]);
+
+  const [title, setTitle] = useState('');
+  const [content, setContent] = useState('');
+  const [isQuestionOverride, setIsQuestionOverride] = useState<boolean | null>(null);
+
+  const [images, setImages] = useState<QueuedImage[]>([]);
+  const [docs, setDocs] = useState<QueuedDoc[]>([]);
+  const [uploadProgress, setUploadProgress] = useState<number>(0);
+
+  const derivedIsQuestion = title.trim().endsWith('?');
+  const isQuestion = isQuestionOverride ?? derivedIsQuestion;
 
   useEffect(() => {
-    const subjectList = mockStore
-      .getSubjects()
-      .sort((a, b) => a.name.localeCompare(b.name));
-    setSubjects(subjectList);
+    (async () => {
+      try {
+        const list = await categoryAPI.getAll();
+        setCategories([...list].sort((a, b) => a.name.localeCompare(b.name)));
+      } catch (e) {
+        console.warn('Failed to load categories:', e);
+      }
+    })();
+
+    return () => {
+      images.forEach((img) => URL.revokeObjectURL(img.preview));
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  const handleSubmit = (event: React.FormEvent<HTMLFormElement>) => {
-    event.preventDefault();
+  const toggleCategory = (id: string, checked: boolean) => {
+    setSelectedCategoryIds((prev) => {
+      if (checked) return prev.includes(id) ? prev : [...prev, id];
+      return prev.filter((x) => x !== id);
+    });
+  };
 
-    if (!user) {
+  const onPickImages = (files: FileList | null) => {
+    if (!files) return;
+    const accepted = Array.from(files).filter((f) =>
+      ['image/jpeg', 'image/png', 'image/webp'].includes(f.type)
+    );
+    const next = accepted.map((f) => ({ id: uid(), file: f, preview: URL.createObjectURL(f) }));
+    setImages((prev) => [...prev, ...next]);
+    if (accepted.length !== files.length) {
       toast({
-        title: 'Sign in required',
-        description: 'Please sign in to create a post.',
+        title: 'Some images were skipped',
+        description: 'Only JPG, PNG, WEBP are allowed.',
         variant: 'destructive',
       });
+    }
+  };
+
+  const onPickDocs = (files: FileList | null) => {
+    if (!files) return;
+    const allowed = [
+      'application/pdf',
+      'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+      'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+      'application/vnd.openxmlformats-officedocument.presentationml.presentation',
+      'application/zip',
+      'application/vnd.rar',
+      'application/x-rar-compressed',
+    ];
+    const accepted = Array.from(files).filter((f) => allowed.includes(f.type) || f.name.endsWith('.rar'));
+    const next = accepted.map((f) => ({ id: uid(), file: f }));
+    setDocs((prev) => [...prev, ...next]);
+    if (accepted.length !== files.length) {
+      toast({ title: 'Some files were skipped', description: 'Unsupported document type.', variant: 'destructive' });
+    }
+  };
+
+  const removeImage = (id: string) => {
+    setImages((prev) => {
+      const target = prev.find((x) => x.id === id);
+      if (target) URL.revokeObjectURL(target.preview);
+      return prev.filter((x) => x.id !== id);
+    });
+  };
+  const removeDoc = (id: string) => setDocs((prev) => prev.filter((x) => x.id !== id));
+
+  const handleSubmit = async (event: React.FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+
+    if (!profile) {
+      toast({ title: 'Sign in required', description: 'Please sign in to create a post.', variant: 'destructive' });
       router.push('/auth/login');
       return;
     }
 
-    if (!formData.title.trim() || !formData.content.trim()) {
-      toast({
-        title: 'Error',
-        description: 'Please fill in all required fields',
-        variant: 'destructive',
-      });
+    if (!title.trim() || !content.trim()) {
+      toast({ title: 'Error', description: 'Please fill in all required fields', variant: 'destructive' });
       return;
     }
 
+    const payload: PostRequestDto = {
+      title: title.trim(),
+      content: content.trim(),
+      isQuestion,
+      categoryIds: selectedCategoryIds.length > 0 ? selectedCategoryIds : undefined,
+    };
+
     setLoading(true);
+    setUploadProgress(0);
 
     try {
-      const timestamp = new Date().toISOString();
-      const newPost = {
-        id: generateId(),
-        author_id: user.id,
-        title: formData.title.trim(),
-        content: formData.content.trim(),
-        is_question: formData.title.trim().endsWith('?'),
-        created_at: timestamp,
-        updated_at: timestamp,
-        is_deleted_at: null,
-        subject_id: formData.subject_id || null,
-      };
+      const created = await postAPI.create(payload);
+      const postId = created.id as string;
 
-      mockStore.addPost(newPost);
+      const totalFiles = images.length + docs.length;
+      if (totalFiles > 0) {
+        let done = 0;
+        const tick = () => {
+          done += 1;
+          setUploadProgress(Math.round((done / totalFiles) * 100));
+        };
 
-      toast({
-        title: 'Success',
-        description: 'Post created successfully',
-      });
+        await Promise.all(
+          images.map(async (img) => {
+            try {
+              await materialAPI.uploadImage(img.file, {
+                postId,
+                title: img.file.name,
+                description: 'image',
+              });
+            } catch (e) {
+              console.error('upload image failed', e);
+              toast({ title: 'Image upload failed', description: img.file.name, variant: 'destructive' });
+            } finally {
+              tick();
+            }
+          })
+        );
 
-      router.push(`/forum/${newPost.id}`);
+        if (docs.length > 0) {
+          try {
+            await materialAPI.uploadDocuments(
+              docs.map((d) => d.file),
+              { postId, title: 'attachments', description: 'documents' }
+            );
+            for (let i = 0; i < docs.length; i++) tick();
+          } catch (e) {
+            console.error('upload documents failed', e);
+            for (let i = 0; i < docs.length; i++) tick();
+            toast({
+              title: 'Document upload failed',
+              description: 'Some files could not be uploaded.',
+              variant: 'destructive',
+            });
+          }
+        }
+      }
+
+      toast({ title: 'Success', description: 'Post created successfully' });
+      router.push(`/forum/${postId}`);
     } catch (error) {
       console.error('Failed to create post', error);
-      toast({
-        title: 'Error',
-        description: 'Failed to create post.',
-        variant: 'destructive',
-      });
+      toast({ title: 'Error', description: 'Failed to create post.', variant: 'destructive' });
     } finally {
       setLoading(false);
     }
@@ -116,56 +216,195 @@ export default function CreatePostPage() {
       <Card>
         <CardHeader>
           <CardTitle>Post Details</CardTitle>
-          <CardDescription>
-            Write a clear title and detailed content to engage the community
-          </CardDescription>
+          <CardDescription>Write a clear title and detailed content to engage the community</CardDescription>
         </CardHeader>
         <CardContent>
           <form onSubmit={handleSubmit} className="space-y-6">
+            {/* Title */}
             <div className="space-y-2">
               <Label htmlFor="title">Title *</Label>
               <Input
                 id="title"
                 placeholder="What's your question or topic?"
-                value={formData.title}
-                onChange={(e) => setFormData({ ...formData, title: e.target.value })}
+                value={title}
+                onChange={(e) => {
+                  setTitle(e.target.value);
+                  if (isQuestionOverride === null) { /* no-op */ }
+                }}
                 required
                 disabled={loading}
               />
+              <p className="text-xs text-muted-foreground">
+                {derivedIsQuestion ? 'Detected as a question (ends with “?”)' : 'Not a question'}
+              </p>
             </div>
 
-            <div className="space-y-2">
-              <Label htmlFor="subject">Subject (Optional)</Label>
-              <Select
-                value={formData.subject_id}
-                onValueChange={(value) => setFormData({ ...formData, subject_id: value })}
-                disabled={loading}
-              >
-                <SelectTrigger>
-                  <SelectValue placeholder="Select a subject" />
-                </SelectTrigger>
-                <SelectContent>
-                  {subjects.map((subject) => (
-                    <SelectItem key={subject.id} value={subject.id}>
-                      {subject.code} - {subject.name}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
-
+           
             <div className="space-y-2">
               <Label htmlFor="content">Content *</Label>
               <Textarea
                 id="content"
                 placeholder="Provide details, context, or your perspective..."
-                value={formData.content}
-                onChange={(e) => setFormData({ ...formData, content: e.target.value })}
+                value={content}
+                onChange={(e) => setContent(e.target.value)}
                 required
                 disabled={loading}
                 rows={10}
                 className="resize-none"
               />
+            </div>
+
+            <div className="flex items-center gap-2">
+              <Checkbox
+                id="isQuestion"
+                checked={isQuestion}
+                onCheckedChange={(val) => setIsQuestionOverride(Boolean(val))}
+                disabled={loading}
+              />
+              <Label htmlFor="isQuestion">Mark as question</Label>
+              <span className="text-xs text-muted-foreground ml-2">(auto: {derivedIsQuestion ? 'Yes' : 'No'})</span>
+            </div>
+
+            <div className="space-y-2">
+              <Label>Categories (Optional)</Label>
+              {categories.length === 0 ? (
+                <p className="text-muted-foreground text-sm">No categories available</p>
+              ) : (
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                  {categories.map((c) => (
+                    <label key={c.id} className="flex items-center gap-2 rounded-md border p-2 cursor-pointer">
+                      <Checkbox
+                        checked={selectedCategoryIds.includes(c.id)}
+                        onCheckedChange={(checked) => toggleCategory(c.id, Boolean(checked))}
+                        disabled={loading}
+                      />
+                      <span>{c.name}</span>
+                    </label>
+                  ))}
+                </div>
+              )}
+            </div>
+
+            <div className="space-y-4">
+              <Label>Attachments (Optional)</Label>
+
+              <div
+                onDragOver={(e) => e.preventDefault()}
+                onDrop={(e) => {
+                  e.preventDefault();
+                  onPickImages(e.dataTransfer.files);
+                }}
+                className="rounded-2xl border-2 border-dashed p-6 hover:bg-muted/40 transition cursor-pointer"
+                onClick={() => document.getElementById('image-input')?.click()}
+              >
+                <div className="flex items-center gap-3">
+                  <div className="p-2 rounded-full border">
+                    <ImagePlus className="h-5 w-5" />
+                  </div>
+                  <div className="flex-1">
+                    <div className="font-medium">Add images</div>
+                    <div className="text-sm text-muted-foreground">
+                      Drag & drop or click to select (JPG, PNG, WEBP)
+                    </div>
+                  </div>
+                  <Button type="button" variant="secondary" disabled={loading}>
+                    <UploadCloud className="h-4 w-4 mr-2" />
+                    Browse
+                  </Button>
+                </div>
+                <input
+                  id="image-input"
+                  type="file"
+                  accept="image/jpeg,image/png,image/webp"
+                  multiple
+                  className="hidden"
+                  onChange={(e) => onPickImages(e.target.files)}
+                />
+                {images.length > 0 && (
+                  <ScrollArea className="mt-4 h-32">
+                    <div className="flex gap-3">
+                      {images.map((img) => (
+                        <div key={img.id} className="relative w-24 h-24 rounded-lg overflow-hidden border">
+                          <img src={img.preview} alt={img.file.name} className="object-cover w-full h-full" />
+                          <button
+                            type="button"
+                            className="absolute top-1 right-1 bg-background/90 rounded-full p-1 border"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              removeImage(img.id);
+                            }}
+                            aria-label="Remove image"
+                          >
+                            <X className="h-4 w-4" />
+                          </button>
+                        </div>
+                      ))}
+                    </div>
+                  </ScrollArea>
+                )}
+              </div>
+
+              <div
+                onDragOver={(e) => e.preventDefault()}
+                onDrop={(e) => {
+                  e.preventDefault();
+                  onPickDocs(e.dataTransfer.files);
+                }}
+                className="rounded-2xl border-2 border-dashed p-6 hover:bg-muted/40 transition cursor-pointer"
+                onClick={() => document.getElementById('doc-input')?.click()}
+              >
+                <div className="flex items-center gap-3">
+                  <div className="p-2 rounded-full border">
+                    <FilePlus2 className="h-5 w-5" />
+                  </div>
+                  <div className="flex-1">
+                    <div className="font-medium">Add documents</div>
+                    <div className="text-sm text-muted-foreground">
+                      Drag & drop or click (PDF, DOCX, XLSX, PPTX, ZIP, RAR)
+                    </div>
+                  </div>
+                  <Button type="button" variant="secondary" disabled={loading}>
+                    <UploadCloud className="h-4 w-4 mr-2" />
+                    Browse
+                  </Button>
+                </div>
+                <input
+                  id="doc-input"
+                  type="file"
+                  accept=".pdf,.docx,.xlsx,.pptx,.zip,.rar,application/pdf,application/vnd.openxmlformats-officedocument.wordprocessingml.document,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,application/vnd.openxmlformats-officedocument.presentationml.presentation,application/zip,application/vnd.rar,application/x-rar-compressed"
+                  multiple
+                  className="hidden"
+                  onChange={(e) => onPickDocs(e.target.files)}
+                />
+                {docs.length > 0 && (
+                  <div className="mt-4 space-y-2">
+                    {docs.map((d) => (
+                      <div key={d.id} className="flex items-center justify-between rounded-md border p-2">
+                        <div className="flex items-center gap-2">
+                          <FileText className="h-4 w-4" />
+                          <span className="text-sm truncate max-w-[220px]">{d.file.name}</span>
+                          <span className="text-xs text-muted-foreground">
+                            ({(d.file.size / (1024 * 1024)).toFixed(1)} MB)
+                          </span>
+                        </div>
+                        <Button type="button" variant="ghost" size="icon" onClick={() => removeDoc(d.id)}>
+                          <Trash2 className="h-4 w-4" />
+                        </Button>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+
+              {loading && (images.length + docs.length) > 0 && (
+                <div className="space-y-2">
+                  <div className="flex items-center justify-between">
+                    <span className="text-sm text-muted-foreground">Uploading attachments…</span>
+                    <span className="text-sm">{uploadProgress}%</span>
+                  </div>
+                  <Progress value={uploadProgress} />
+                </div>
+              )}
             </div>
 
             <div className="flex gap-3 justify-end">

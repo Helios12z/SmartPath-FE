@@ -1,107 +1,54 @@
 'use client';
 
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useMemo } from 'react';
+import Link from 'next/link';
 import { useAuth } from '@/context/AuthContext';
+import { useToast } from '@/hooks/use-toast';
+
+import { postAPI } from '@/lib/api/postAPI';
+import { reactionAPI } from '@/lib/api/reactionAPI';
+
+import type { PostResponseDto } from '@/lib/types';
+import { mapPostToUI } from '@/lib/mappers/postMapper';
+import { UIPost } from '@/lib/mappers/postMapper';
+
 import { PostCard } from '@/components/forum/PostCard';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Card } from '@/components/ui/card';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { PlusCircle, Search, TrendingUp, Clock, Filter } from 'lucide-react';
-import { useToast } from '@/hooks/use-toast';
-import Link from 'next/link';
-import { mockStore } from '@/lib/mockStore';
 
-type PostWithMeta = ReturnType<typeof mapPostWithMeta>;
+type PostFetchStrategy = 'all' | 'byUser' | 'recommended';
 
-const mapPostWithMeta = (
-  post: ReturnType<typeof mockStore.getPosts>[number],
-  context: {
-    users: ReturnType<typeof mockStore.getUsers>;
-    reactions: ReturnType<typeof mockStore.getReactions>;
-    comments: ReturnType<typeof mockStore.getComments>;
-    categories: ReturnType<typeof mockStore.getCategories>;
-    categoryRelations: ReturnType<typeof mockStore.getCategoryPostRelations>;
-    badgesByUser: Map<string, ReturnType<typeof mockStore.getHighestBadgeForUser>>;
-  }
-) => {
-  const author = context.users.find((user) => user.id === post.author_id);
-  const positiveReactions = context.reactions.filter(
-    (reaction) => reaction.post_id === post.id && reaction.is_positive
-  );
-  const postComments = context.comments.filter((comment) => comment.post_id === post.id);
-  const postCategories = context.categoryRelations
-    .filter((relation) => relation.post_id === post.id)
-    .map((relation) => context.categories.find((category) => category.id === relation.category_id))
-    .filter(Boolean)
-    .map((category) => ({
-      id: category!.id,
-      name: category!.name,
-      color: 'blue',
-    }));
-
-  return {
-    ...post,
-    author: author
-      ? {
-          id: author.id,
-          full_name: author.full_name,
-          avatar_url: author.avatar_url,
-          reputation_points: author.reputation_points,
-          primaryBadge: context.badgesByUser.get(author.id) ?? null,
-        }
-      : {
-          id: post.author_id,
-          full_name: 'Unknown User',
-          avatar_url: null,
-          reputation_points: 0,
-          primaryBadge: null,
-        },
-    likes_count: positiveReactions.length,
-    comments_count: postComments.length,
-    tags: postCategories,
-  };
-};
-
-const generateId = () => {
-  if (typeof crypto !== 'undefined' && 'randomUUID' in crypto) {
-    return crypto.randomUUID();
-  }
-  return Math.random().toString(36).slice(2, 10);
+const FETCH_STRATEGIES: Record<
+  PostFetchStrategy,
+  (args?: { userId?: string }) => Promise<PostResponseDto[]>
+> = {
+  all: async () => postAPI.getAll(),
+  byUser: async (args) => (args?.userId ? postAPI.getByUser(args.userId) : []),
+  recommended: async () => postAPI.getAll(), // TODO: đổi sang endpoint recommend
 };
 
 export default function ForumPage() {
-  const { user } = useAuth();
+  const { profile } = useAuth();
   const { toast } = useToast();
-  const [posts, setPosts] = useState<PostWithMeta[]>([]);
+
   const [loading, setLoading] = useState(true);
+  const [rawPosts, setRawPosts] = useState<PostResponseDto[]>([]);
   const [searchQuery, setSearchQuery] = useState('');
+
   const [userLikes, setUserLikes] = useState<Set<string>>(new Set());
+  const [strategy, setStrategy] = useState<PostFetchStrategy>('all');
 
-  const fetchPosts = useCallback(() => {
+  const fetchPosts = useCallback(async () => {
+    setLoading(true);
     try {
-      const context = {
-        users: mockStore.getUsers(),
-        reactions: mockStore.getReactions(),
-        comments: mockStore.getComments(),
-        categories: mockStore.getCategories(),
-        categoryRelations: mockStore.getCategoryPostRelations(),
-        badgesByUser: new Map<string, ReturnType<typeof mockStore.getHighestBadgeForUser>>(),
-      };
-
-      context.users.forEach((user) => {
-        context.badgesByUser.set(user.id, mockStore.getHighestBadgeForUser(user.id));
-      });
-
-      const postsWithMeta = mockStore
-        .getPosts()
-        .sort(
-          (a, b) =>
-            new Date(b.created_at).getTime() - new Date(a.created_at).getTime()
-        )
-        .map((post) => mapPostWithMeta(post, context));
-
-      setPosts(postsWithMeta);
+      const data = await FETCH_STRATEGIES[strategy]({ userId: profile?.id });
+      const sorted = [...data].sort(
+        (a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
+      );
+      setRawPosts(sorted);
     } catch (error) {
       console.error('Failed to load posts:', error);
       toast({
@@ -112,34 +59,29 @@ export default function ForumPage() {
     } finally {
       setLoading(false);
     }
-  }, [toast]);
-
-  const fetchUserLikes = useCallback(() => {
-    try {
-      const userReactions = mockStore
-        .getReactions()
-        .filter((reaction) => reaction.user_id === user?.id && reaction.is_positive);
-
-      setUserLikes(new Set(userReactions.map((reaction) => reaction.post_id)));
-    } catch (error) {
-      console.error('Error fetching user likes:', error);
-    }
-  }, [user]);
+  }, [strategy, profile?.id, toast]);
 
   useEffect(() => {
     fetchPosts();
   }, [fetchPosts]);
 
-  useEffect(() => {
-    if (user) {
-      fetchUserLikes();
-    } else {
-      setUserLikes(new Set());
-    }
-  }, [user, fetchUserLikes]);
+  const uiPosts: UIPost[] = useMemo(() => rawPosts.map(mapPostToUI), [rawPosts]);
 
-  const handleLike = (postId: string) => {
-    if (!user) {
+  const filteredPosts = useMemo(() => {
+    const q = searchQuery.trim().toLowerCase();
+    if (!q) return uiPosts;
+    return uiPosts.filter(
+      (p) => p.title.toLowerCase().includes(q) || p.content.toLowerCase().includes(q)
+    );
+  }, [uiPosts, searchQuery]);
+
+  const popularPosts = useMemo(
+    () => [...filteredPosts].sort((a, b) => b.likes_count - a.likes_count),
+    [filteredPosts]
+  );
+
+  const handleLike = async (postId: string) => {
+    if (!profile?.id) {
       toast({
         title: 'Sign in required',
         description: 'Please sign in to like posts.',
@@ -148,71 +90,69 @@ export default function ForumPage() {
       return;
     }
 
-    const reactions = mockStore.getReactions();
-    const existingReaction = reactions.find(
-      (reaction) =>
-        reaction.post_id === postId &&
-        reaction.user_id === user.id &&
-        reaction.is_positive
-    );
+    const alreadyLiked = userLikes.has(postId);
 
-    if (existingReaction) {
-      mockStore.removeReaction(
-        (reaction) => reaction.id === existingReaction.id
-      );
+    try {
+      // optimistic
       setUserLikes((prev) => {
         const next = new Set(prev);
-        next.delete(postId);
+        alreadyLiked ? next.delete(postId) : next.add(postId);
         return next;
       });
-      toast({
-        title: 'Success',
-        description: 'Removed like',
+
+      if (alreadyLiked) {
+        await reactionAPI.remove(postId);
+        toast({ title: 'Success', description: 'Removed like' });
+      } else {
+        await reactionAPI.react({ post_id: postId, is_positive: true });
+        toast({ title: 'Success', description: 'Post liked' });
+      }
+
+      // (Tuỳ chọn) cập nhật reactionCount local cho mượt:
+      // setRawPosts(cur => cur.map(p => p.id === postId
+      //   ? { ...p, reactionCount: p.reactionCount + (alreadyLiked ? -1 : 1) }
+      //   : p
+      // ));
+      // hoặc refetch: await fetchPosts();
+    } catch (err) {
+      // rollback
+      setUserLikes((prev) => {
+        const next = new Set(prev);
+        alreadyLiked ? next.add(postId) : next.delete(postId);
+        return next;
       });
-    } else {
-      mockStore.addReaction({
-        id: generateId(),
-        post_id: postId,
-        user_id: user.id,
-        is_positive: true,
-        created_at: new Date().toISOString(),
-      });
-      setUserLikes((prev) => new Set(prev).add(postId));
+      console.error(err);
       toast({
-        title: 'Success',
-        description: 'Post liked',
+        title: 'Error',
+        description: 'Failed to update reaction',
+        variant: 'destructive',
       });
     }
-
-    fetchPosts();
   };
-
-  const filteredPosts = posts.filter((post) =>
-    post.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
-    post.content.toLowerCase().includes(searchQuery.toLowerCase())
-  );
-
-  const popularPosts = [...filteredPosts].sort((a, b) => b.likes_count - a.likes_count);
 
   return (
     <div className="space-y-6">
+      {/* Header */}
       <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
         <div>
           <h1 className="text-3xl font-bold">Forum</h1>
           <p className="text-muted-foreground">Discuss topics and share knowledge</p>
         </div>
-        <Link href="/forum/create">
-          <Button>
-            <PlusCircle className="mr-2 h-4 w-4" />
-            New Post
-          </Button>
-        </Link>
+        <div className="flex items-center gap-2">
+          <Link href="/forum/create">
+            <Button>
+              <PlusCircle className="mr-2 h-4 w-4" />
+              New Post
+            </Button>
+          </Link>
+        </div>
       </div>
 
+      {/* Search */}
       <Card className="p-4">
         <div className="flex gap-2">
           <div className="relative flex-1">
-            <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+            <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
             <Input
               placeholder="Search posts..."
               value={searchQuery}
@@ -220,12 +160,13 @@ export default function ForumPage() {
               className="pl-10"
             />
           </div>
-          <Button variant="outline" size="icon">
+          <Button variant="outline" size="icon" title="Filter (coming soon)">
             <Filter className="h-4 w-4" />
           </Button>
         </div>
       </Card>
 
+      {/* Tabs */}
       <Tabs defaultValue="recent" className="w-full">
         <TabsList className="grid w-full max-w-md grid-cols-2">
           <TabsTrigger value="recent">
@@ -241,7 +182,7 @@ export default function ForumPage() {
         <TabsContent value="recent" className="space-y-4 mt-6">
           {loading ? (
             <div className="text-center py-12">
-              <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mx-auto"></div>
+              <div className="animate-spin rounded-full h-12 w-12 border-b-2 mx-auto"></div>
               <p className="mt-4 text-muted-foreground">Loading posts...</p>
             </div>
           ) : filteredPosts.length === 0 ? (
@@ -266,7 +207,7 @@ export default function ForumPage() {
         <TabsContent value="popular" className="space-y-4 mt-6">
           {loading ? (
             <div className="text-center py-12">
-              <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mx-auto"></div>
+              <div className="animate-spin rounded-full h-12 w-12 border-b-2 mx-auto"></div>
               <p className="mt-4 text-muted-foreground">Loading posts...</p>
             </div>
           ) : popularPosts.length === 0 ? (
