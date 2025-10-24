@@ -9,8 +9,7 @@ import { postAPI } from '@/lib/api/postAPI';
 import { reactionAPI } from '@/lib/api/reactionAPI';
 
 import type { PostResponseDto } from '@/lib/types';
-import { mapPostToUI } from '@/lib/mappers/postMapper';
-import { UIPost } from '@/lib/mappers/postMapper';
+import { mapPostToUI, type UIPost } from '@/lib/mappers/postMapper';
 
 import { PostCard } from '@/components/forum/PostCard';
 import { Button } from '@/components/ui/button';
@@ -27,7 +26,7 @@ const FETCH_STRATEGIES: Record<
 > = {
   all: async () => postAPI.getAll(),
   byUser: async (args) => (args?.userId ? postAPI.getByUser(args.userId) : []),
-  recommended: async () => postAPI.getAll(), // TODO: đổi sang endpoint recommend
+  recommended: async () => postAPI.getAll(), //TODO: Change to recommendation fetch endpoint instead of getting all posts
 };
 
 export default function ForumPage() {
@@ -37,8 +36,6 @@ export default function ForumPage() {
   const [loading, setLoading] = useState(true);
   const [rawPosts, setRawPosts] = useState<PostResponseDto[]>([]);
   const [searchQuery, setSearchQuery] = useState('');
-
-  const [userLikes, setUserLikes] = useState<Set<string>>(new Set());
   const [strategy, setStrategy] = useState<PostFetchStrategy>('all');
 
   const fetchPosts = useCallback(async () => {
@@ -51,11 +48,7 @@ export default function ForumPage() {
       setRawPosts(sorted);
     } catch (error) {
       console.error('Failed to load posts:', error);
-      toast({
-        title: 'Error',
-        description: 'Failed to load posts',
-        variant: 'destructive',
-      });
+      toast({ title: 'Error', description: 'Failed to load posts', variant: 'destructive' });
     } finally {
       setLoading(false);
     }
@@ -80,59 +73,68 @@ export default function ForumPage() {
     [filteredPosts]
   );
 
-  const handleLike = async (postId: string) => {
+  type ReactionKind = 'like' | 'dislike';
+
+  const mutateLocal = (postId: string, updater: (p: PostResponseDto) => PostResponseDto) => {
+    setRawPosts((cur) => cur.map((p) => (p.id === postId ? updater(p) : p)));
+  };
+
+  const handleReact = async (postId: string, kind: ReactionKind) => {
     if (!profile?.id) {
-      toast({
-        title: 'Sign in required',
-        description: 'Please sign in to like posts.',
-        variant: 'destructive',
-      });
+      toast({ title: 'Sign in required', description: 'Please sign in to react.', variant: 'destructive' });
       return;
     }
 
-    const alreadyLiked = userLikes.has(postId);
+    const target = rawPosts.find((p) => p.id === postId);
+    if (!target) return;
+
+    const currPos = !!target.isPositiveReacted;
+    const currNeg = !!target.isNegativeReacted;
+    const desiredPos = kind === 'like';
+    const desiredNeg = kind === 'dislike';
+
+    let action: 'set-like' | 'set-dislike' | 'clear' = 'set-like';
+    let delta = 0;
+
+    if ((currPos && desiredPos) || (currNeg && desiredNeg)) {
+      action = 'clear';
+      delta = -1;
+    } else if (!currPos && !currNeg) {
+      action = desiredPos ? 'set-like' : 'set-dislike';
+      delta = +1;
+    } else {
+      action = desiredPos ? 'set-like' : 'set-dislike';
+      delta = 0;
+    }
+
+    const prev = { ...target };
+    mutateLocal(postId, (p) => ({
+      ...p,
+      isPositiveReacted: action === 'set-like' ? true : action === 'clear' ? null : false,
+      isNegativeReacted: action === 'set-dislike' ? true : action === 'clear' ? null : false,
+      reactionCount: Math.max(0, (p.reactionCount ?? 0) + delta),
+    }));
 
     try {
-      // optimistic
-      setUserLikes((prev) => {
-        const next = new Set(prev);
-        alreadyLiked ? next.delete(postId) : next.add(postId);
-        return next;
-      });
-
-      if (alreadyLiked) {
-        await reactionAPI.remove(postId);
-        toast({ title: 'Success', description: 'Removed like' });
+      if (action === 'clear') {
+        await reactionAPI.remove({ postId });
+        toast({ title: 'Success', description: 'Reaction cleared' });
+      } else if (action === 'set-like') {
+        await reactionAPI.react({ postId, isPositive: true });
+        toast({ title: 'Success', description: 'Liked post' });
       } else {
-        await reactionAPI.react({ post_id: postId, is_positive: true });
-        toast({ title: 'Success', description: 'Post liked' });
+        await reactionAPI.react({ postId, isPositive: false });
+        toast({ title: 'Success', description: 'Disliked post' });
       }
-
-      // (Tuỳ chọn) cập nhật reactionCount local cho mượt:
-      // setRawPosts(cur => cur.map(p => p.id === postId
-      //   ? { ...p, reactionCount: p.reactionCount + (alreadyLiked ? -1 : 1) }
-      //   : p
-      // ));
-      // hoặc refetch: await fetchPosts();
-    } catch (err) {
-      // rollback
-      setUserLikes((prev) => {
-        const next = new Set(prev);
-        alreadyLiked ? next.add(postId) : next.delete(postId);
-        return next;
-      });
-      console.error(err);
-      toast({
-        title: 'Error',
-        description: 'Failed to update reaction',
-        variant: 'destructive',
-      });
+    } catch (e) {
+      mutateLocal(postId, () => prev);
+      console.error(e);
+      toast({ title: 'Error', description: 'Failed to update reaction', variant: 'destructive' });
     }
   };
 
   return (
     <div className="space-y-6">
-      {/* Header */}
       <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
         <div>
           <h1 className="text-3xl font-bold">Forum</h1>
@@ -148,7 +150,6 @@ export default function ForumPage() {
         </div>
       </div>
 
-      {/* Search */}
       <Card className="p-4">
         <div className="flex gap-2">
           <div className="relative flex-1">
@@ -166,7 +167,6 @@ export default function ForumPage() {
         </div>
       </Card>
 
-      {/* Tabs */}
       <Tabs defaultValue="recent" className="w-full">
         <TabsList className="grid w-full max-w-md grid-cols-2">
           <TabsTrigger value="recent">
@@ -197,8 +197,10 @@ export default function ForumPage() {
               <PostCard
                 key={post.id}
                 post={post}
-                onLike={() => handleLike(post.id)}
-                isLiked={userLikes.has(post.id)}
+                onLike={() => handleReact(post.id, 'like')}
+                onDislike={() => handleReact(post.id, 'dislike')}
+                isLiked={post.isPositiveReacted === true}
+                isDisliked={post.isNegativeReacted === true}
               />
             ))
           )}
@@ -219,8 +221,10 @@ export default function ForumPage() {
               <PostCard
                 key={post.id}
                 post={post}
-                onLike={() => handleLike(post.id)}
-                isLiked={userLikes.has(post.id)}
+                onLike={() => handleReact(post.id, 'like')}
+                onDislike={() => handleReact(post.id, 'dislike')}
+                isLiked={post.isPositiveReacted === true}
+                isDisliked={post.isNegativeReacted === true}
               />
             ))
           )}

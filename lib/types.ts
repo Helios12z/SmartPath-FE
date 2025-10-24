@@ -60,6 +60,8 @@ export interface PostResponseDto {
   reactionCount: number;
   commentCount: number;
   categories?: string[];
+  isPositiveReacted: boolean | null;
+  isNegativeReacted: boolean | null;
 }
 
 export interface PostRequestDto {
@@ -84,20 +86,21 @@ export interface CommentResponseDto {
   authorPoint: number;
   createdAt: string;               
   replies?: CommentResponseDto[];  
+  isPositiveReacted: boolean | null;
+  isNegativeReacted: boolean | null;
 }
 
-export interface Reaction {
+export type ReactionRequestDto = {
+  postId?: string;
+  commentId?: string;
+  isPositive: boolean;
+};
+
+export type ReactionResponseDto = {
   id: string;
-  post_id: string;
-  user_id: string;
-  is_positive: boolean;
-  created_at: string;
-}
-
-export interface ReactionRequestDto {
-  post_id: string;
-  is_positive: boolean;
-}
+  isPositive: boolean;
+  createdAt: string;
+};
 
 export interface ReportRequestDto {
   post_id: string;

@@ -20,6 +20,8 @@ export type UIPost = {
   likes_count: number;
   comments_count: number;
   tags: Array<{ id: string; name: string; color?: string }>;
+  isPositiveReacted: boolean | null;
+  isNegativeReacted: boolean | null;
 };
 
 export function mapPostToUI(p: PostResponseDto): UIPost {
@@ -43,5 +45,7 @@ export function mapPostToUI(p: PostResponseDto): UIPost {
     likes_count: p.reactionCount,
     comments_count: p.commentCount,
     tags: (p.categories ?? []).map((name) => ({ id: name, name })),
+    isPositiveReacted: p.isPositiveReacted,
+    isNegativeReacted: p.isNegativeReacted
   };
 }

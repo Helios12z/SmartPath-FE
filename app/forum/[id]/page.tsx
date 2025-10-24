@@ -11,12 +11,19 @@ import { useToast } from '@/hooks/use-toast';
 import { postAPI } from '@/lib/api/postAPI';
 import { reactionAPI } from '@/lib/api/reactionAPI';
 import { materialAPI, type MaterialResponse } from '@/lib/api/materialAPI';
-import { commentAPI } from '@/lib/api/commentAPI'; 
+import { commentAPI } from '@/lib/api/commentAPI';
 import { userAPI } from '@/lib/api/userAPI';
 
 import type { PostResponseDto, CommentResponseDto, CommentRequestDto } from '@/lib/types';
 import { mapPostToUI, type UIPost } from '@/lib/mappers/postMapper';
 import { mapUserToPostOwner, type PostOwner } from '@/lib/mappers/postOwnerMapper';
+
+import {
+  mapCommentsToUITree,
+  updateCommentLikeOptimistic,
+  insertReplyIntoTree,
+  type UIComment,
+} from '@/lib/mappers/commentMapper';
 
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader } from '@/components/ui/card';
@@ -67,13 +74,15 @@ export default function PostDetailPage() {
   const uiPost = useMemo<UIPost | null>(() => (rawPost ? mapPostToUI(rawPost) : null), [rawPost]);
 
   // likes
-  const [isLiked, setIsLiked] = useState(false); 
+  const [isLiked, setIsLiked] = useState(false);
   const [likesCount, setLikesCount] = useState(0);
 
   // comments
-  const [comments, setComments] = useState<CommentResponseDto[]>([]);
+  const [comments, setComments] = useState<UIComment[]>([]);
   const [newComment, setNewComment] = useState('');
   const [submittingComment, setSubmittingComment] = useState(false);
+  const [replyText, setReplyText] = useState<Record<string, string>>({});
+  const [replyOpen, setReplyOpen] = useState<Record<string, boolean>>({});
 
   // materials
   const [materials, setMaterials] = useState<MaterialResponse[]>([]);
@@ -114,18 +123,19 @@ export default function PostDetailPage() {
   const loadComments = useCallback(async () => {
     if (!postId) return;
     try {
-      const list = await commentAPI.getByPost(postId);
-      setComments(list);
+      const list = await commentAPI.getByPost(postId); 
+      const tree = mapCommentsToUITree(list, undefined, 2);
+      setComments(tree);
     } catch (e) {
       console.error('Failed to load comments', e);
     }
   }, [postId]);
 
-  const loadOwnerInformation = useCallback(async ()=>{
+  const loadOwnerInformation = useCallback(async () => {
     if (!postId) return
     try {
-      const user=await userAPI.getById(rawPost?.authorId??"")
-      const postOwner=mapUserToPostOwner(user)
+      const user = await userAPI.getById(rawPost?.authorId ?? "")
+      const postOwner = mapUserToPostOwner(user)
       setOwner(postOwner);
     }
     catch (e) {
@@ -150,10 +160,10 @@ export default function PostDetailPage() {
     setLikesCount((c) => c + (already ? -1 : 1));
     try {
       if (already) {
-        await reactionAPI.remove(postId);
+        await reactionAPI.remove({ postId });
         toast({ title: 'Success', description: 'Removed like' });
       } else {
-        await reactionAPI.react({ post_id: postId, is_positive: true });
+        await reactionAPI.react({ postId, isPositive: true });
         toast({ title: 'Success', description: 'Post liked' });
       }
     } catch (e) {
@@ -165,29 +175,97 @@ export default function PostDetailPage() {
   };
 
   const handleSubmitComment = async (e: React.FormEvent<HTMLFormElement>) => {
-  e.preventDefault();
-  if (!profile?.id || !postId || !newComment.trim()) {
-    toast({ title: 'Sign in required', description: 'Please sign in to comment.', variant: 'destructive' });
-    return;
-  }
-  setSubmittingComment(true);
-  try {
-    const payload: CommentRequestDto = {
-      content: newComment.trim(),
-      postId: postId,
-      parentCommentId: null 
-    };
-    const created = await commentAPI.create(payload);   
-    setComments((prev) => [...prev, created]);          
-    setNewComment('');
-    toast({ title: 'Success', description: 'Comment posted successfully' });
-  } catch (e) {
-    console.error(e);
-    toast({ title: 'Error', description: 'Failed to post comment.', variant: 'destructive' });
-  } finally {
-    setSubmittingComment(false);
-  }
-};
+    e.preventDefault();
+    if (!profile?.id || !postId || !newComment.trim()) {
+      toast({ title: 'Sign in required', description: 'Please sign in to comment.', variant: 'destructive' });
+      return;
+    }
+    setSubmittingComment(true);
+    try {
+      const payload: CommentRequestDto = {
+        postId,
+        content: newComment.trim(),
+        parentCommentId: null,
+      };
+      const created = await commentAPI.create(payload);
+
+      setComments(prev => [
+        ...prev,
+        {
+          ...created,
+          depth: 0,
+          likes: 0,
+          isLiked: false,
+          children: [],
+        },
+      ]);
+
+      setNewComment('');
+      toast({ title: 'Success', description: 'Comment posted successfully' });
+    } catch (e) {
+      console.error(e);
+      toast({ title: 'Error', description: 'Failed to post comment.', variant: 'destructive' });
+    } finally {
+      setSubmittingComment(false);
+    }
+  };
+
+  const toggleCommentLike = async (commentId: string) => {
+    if (!profile?.id) {
+      toast({ title: 'Sign in required', description: 'Please sign in to like comments.', variant: 'destructive' });
+      return;
+    }
+
+    const current = (function find(nodes: UIComment[]): UIComment | undefined {
+      for (const n of nodes) {
+        if (n.id === commentId) return n;
+        const sub = find(n.children ?? []);
+        if (sub) return sub;
+      }
+      return undefined;
+    })(comments);
+
+    const already = current?.isLiked ?? false;
+
+    // optimistic UI
+    const snapshot = comments;
+    setComments(updateCommentLikeOptimistic(comments, commentId, !already));
+    try {
+      if (already) {
+        await reactionAPI.remove({ commentId });
+        toast({ title: 'Success', description: 'Removed like' });
+      } else {
+        await reactionAPI.react({ commentId, isPositive: true });
+        toast({ title: 'Success', description: 'Comment liked' });
+      }
+    } catch (e) {
+      // rollback
+      setComments(snapshot);
+      console.error(e);
+      toast({ title: 'Error', description: 'Failed to update reaction', variant: 'destructive' });
+    }
+  };
+
+  const handleSubmitReply = async (parentId: string) => {
+    if (!profile?.id || !postId) {
+      toast({ title: 'Sign in required', description: 'Please sign in to reply.', variant: 'destructive' });
+      return;
+    }
+    const text = (replyText[parentId] ?? '').trim();
+    if (!text) return;
+
+    try {
+      const payload: CommentRequestDto = { postId, content: text, parentCommentId: parentId };
+      const created = await commentAPI.create(payload);
+      setComments(prev => insertReplyIntoTree(prev, parentId, created, 2));
+      setReplyText(m => ({ ...m, [parentId]: '' }));
+      setReplyOpen(m => ({ ...m, [parentId]: false }));
+      toast({ title: 'Success', description: 'Reply posted successfully' });
+    } catch (e) {
+      console.error(e);
+      toast({ title: 'Error', description: 'Failed to post reply.', variant: 'destructive' });
+    }
+  };
 
   if (loading || !uiPost) {
     return (
@@ -342,7 +420,7 @@ export default function PostDetailPage() {
         <CardContent className="space-y-6">
           <form onSubmit={handleSubmitComment} className="space-y-3">
             <Textarea
-              placeholder="Add a comment..."
+              placeholder="Comment..."
               value={newComment}
               onChange={(e) => setNewComment(e.target.value)}
               disabled={submittingComment}
@@ -351,7 +429,7 @@ export default function PostDetailPage() {
             <div className="flex justify-end">
               <Button type="submit" disabled={submittingComment || !newComment.trim()}>
                 <Send className="mr-2 h-4 w-4" />
-                {submittingComment ? 'Posting...' : 'Post Comment'}
+                {submittingComment ? 'Đang đăng...' : 'Đăng Comment'}
               </Button>
             </div>
           </form>
@@ -363,33 +441,121 @@ export default function PostDetailPage() {
           ) : (
             <div className="space-y-4">
               {comments.map((c) => (
-                <div key={c.id} className="flex gap-3">
-                  <Avatar className="h-8 w-8">
-                    <AvatarImage src={c.authorAvatarUrl ?? undefined} />
-                    <AvatarFallback>{(c.authorUsername || 'U').charAt(0).toUpperCase()}</AvatarFallback>
-                  </Avatar>
-                  <div className="flex-1">
-                    <div className="bg-slate-100 dark:bg-slate-900 rounded-lg p-3">
-                      <div className="flex items-center gap-2 mb-1">
-                        <Link href={`/profile/${c.authorId}`} className="font-medium text-sm hover:underline">
-                          {c.authorUsername}
-                        </Link>
-                        {typeof c.authorPoint === 'number' && (
-                          <Badge variant="secondary" className="text-xs">{c.authorPoint} pts</Badge>
-                        )}
-                      </div>
-                      <p className="text-sm">{c.content}</p>
-                    </div>
-                    <div className="flex items-center gap-3 mt-1 text-xs text-muted-foreground px-3">
-                      <span>{formatDistanceToNow(new Date(c.createdAt), { addSuffix: true })}</span>
-                    </div>
-                  </div>
-                </div>
+                <CommentItem
+                  key={c.id}
+                  c={c}
+                  onLike={toggleCommentLike}
+                  replyOpen={replyOpen}
+                  setReplyOpen={setReplyOpen}
+                  replyText={replyText}
+                  setReplyText={setReplyText}
+                  onSubmitReply={handleSubmitReply}
+                />
               ))}
             </div>
           )}
         </CardContent>
       </Card>
+    </div>
+  );
+}
+
+function CommentItem({
+  c,
+  onLike,
+  replyOpen,
+  setReplyOpen,
+  replyText,
+  setReplyText,
+  onSubmitReply,
+}: {
+  c: UIComment;
+  onLike: (id: string) => void;
+  replyOpen: Record<string, boolean>;
+  setReplyOpen: React.Dispatch<React.SetStateAction<Record<string, boolean>>>;
+  replyText: Record<string, string>;
+  setReplyText: React.Dispatch<React.SetStateAction<Record<string, string>>>;
+  onSubmitReply: (parentId: string) => void;
+}) {
+  return (
+    <div className="space-y-2">
+      <div className="flex gap-3">
+        <Avatar className="h-8 w-8">
+          <AvatarImage src={c.authorAvatarUrl ?? undefined} />
+          <AvatarFallback>{(c.authorUsername || 'U').charAt(0).toUpperCase()}</AvatarFallback>
+        </Avatar>
+        <div className="flex-1">
+          <div className="bg-slate-100 dark:bg-slate-900 rounded-lg p-3">
+            <div className="flex items-center gap-2 mb-1">
+              <Link href={`/profile/${c.authorId}`} className="font-medium text-sm hover:underline">
+                {c.authorUsername}
+              </Link>
+              {typeof c.authorPoint === 'number' && (
+                <Badge variant="secondary" className="text-xs">{c.authorPoint} pts</Badge>
+              )}
+            </div>
+            <p className="text-sm">{c.content}</p>
+          </div>
+
+          <div className="flex items-center gap-3 mt-1 text-xs text-muted-foreground px-1">
+            <button
+              type="button"
+              className={`inline-flex items-center gap-1 hover:text-foreground transition ${c.isLiked ? 'text-red-500' : ''}`}
+              onClick={() => onLike(c.id)}
+              title="Like"
+            >
+              <Heart className={`h-3 w-3 ${c.isLiked ? 'fill-red-500' : ''}`} />
+              <span>{c.likes ?? 0}</span>
+            </button>
+
+            {c.depth < 2 && (
+              <button
+                type="button"
+                className="hover:text-foreground transition"
+                onClick={() => setReplyOpen((m) => ({ ...m, [c.id]: !m[c.id] }))}
+              >
+                Reply
+              </button>
+            )}
+
+            <span>{formatDistanceToNow(new Date(c.createdAt), { addSuffix: true })}</span>
+          </div>
+
+          {replyOpen[c.id] && c.depth < 2 && (
+            <div className="mt-2 pl-1">
+              <Textarea
+                placeholder="Reply..."
+                value={replyText[c.id] ?? ''}
+                onChange={(e) => setReplyText((m) => ({ ...m, [c.id]: e.target.value }))}
+                rows={2}
+              />
+              <div className="flex justify-end mt-2">
+                <Button size="sm" onClick={() => onSubmitReply(c.id)} disabled={!((replyText[c.id] ?? '').trim())}>
+                  <Send className="mr-2 h-4 w-4" />
+                  Reply
+                </Button>
+              </div>
+            </div>
+          )}
+        </div>
+      </div>
+
+      {c.children?.length > 0 && (
+        <div className="pl-8 space-y-3">
+          {c.children.map(child => (
+            <CommentItem
+              key={child.id}
+              c={child}
+              onLike={onLike}
+              replyOpen={replyOpen}
+              setReplyOpen={setReplyOpen}
+              replyText={replyText}
+              setReplyText={setReplyText}
+              onSubmitReply={onSubmitReply}
+            />
+          ))}
+        </div>
+      )}
     </div>
   );
 }
