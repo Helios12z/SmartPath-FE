@@ -5,6 +5,9 @@ export const reactionAPI = {
   react: (payload: ReactionRequestDto): Promise<ReactionResponseDto> =>
     fetchWrapper.post('/reaction', payload),
 
-  remove: (payload: { postId?: string; commentId?: string }): Promise<void> =>
-    fetchWrapper.del('/reaction', { body: JSON.stringify(payload) }),
+  removePost: (postId: string): Promise<void> =>
+    fetchWrapper.del(`/reaction/remove-post-reaction/${postId}`),
+
+  removeComment: (commentId: string): Promise<void> =>
+    fetchWrapper.del(`/reaction/remove-comment-reaction/${commentId}`),
 };

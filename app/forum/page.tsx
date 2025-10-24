@@ -117,7 +117,7 @@ export default function ForumPage() {
 
     try {
       if (action === 'clear') {
-        await reactionAPI.remove({ postId });
+        await reactionAPI.removePost(postId );
         toast({ title: 'Success', description: 'Reaction cleared' });
       } else if (action === 'set-like') {
         await reactionAPI.react({ postId, isPositive: true });

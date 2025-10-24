@@ -14,7 +14,7 @@ import { materialAPI, type MaterialResponse } from '@/lib/api/materialAPI';
 import { commentAPI } from '@/lib/api/commentAPI';
 import { userAPI } from '@/lib/api/userAPI';
 
-import type { PostResponseDto, CommentResponseDto, CommentRequestDto } from '@/lib/types';
+import type { PostResponseDto, CommentRequestDto } from '@/lib/types';
 import { mapPostToUI, type UIPost } from '@/lib/mappers/postMapper';
 import { mapUserToPostOwner, type PostOwner } from '@/lib/mappers/postOwnerMapper';
 
@@ -31,7 +31,17 @@ import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { Badge } from '@/components/ui/badge';
 import { Textarea } from '@/components/ui/textarea';
 import { Separator } from '@/components/ui/separator';
-import { ArrowLeft, Heart, MessageSquare, Send, Trash2, Edit, FileText, Download } from 'lucide-react';
+import {
+  ArrowLeft,
+  Heart,
+  MessageSquare,
+  Send,
+  Trash2,
+  Edit,
+  FileText,
+  Download,
+  ThumbsDown,
+} from 'lucide-react';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 
 const toHttpUrl = (u: string) => {
@@ -41,7 +51,6 @@ const toHttpUrl = (u: string) => {
   if (/^\/\//.test(trimmed)) return `https:${trimmed}`;
   return `https://${trimmed.replace(/^\/+/, '')}`;
 };
-
 
 const getExt = (url: string) => {
   try {
@@ -73,9 +82,10 @@ export default function PostDetailPage() {
   const [owner, setOwner] = useState<PostOwner | null>(null);
   const uiPost = useMemo<UIPost | null>(() => (rawPost ? mapPostToUI(rawPost) : null), [rawPost]);
 
-  // likes
+  // Reaction state (3-state)
   const [isLiked, setIsLiked] = useState(false);
-  const [likesCount, setLikesCount] = useState(0);
+  const [isDisliked, setIsDisliked] = useState(false);
+  const [reactionCount, setReactionCount] = useState(0);
 
   // comments
   const [comments, setComments] = useState<UIComment[]>([]);
@@ -92,7 +102,10 @@ export default function PostDetailPage() {
   // preview
   const [previewOpen, setPreviewOpen] = useState(false);
   const [previewUrl, setPreviewUrl] = useState<string | null>(null);
-  const openPreview = (url: string) => { setPreviewUrl(url); setPreviewOpen(true); };
+  const openPreview = (url: string) => {
+    setPreviewUrl(url);
+    setPreviewOpen(true);
+  };
 
   const loadPost = useCallback(async () => {
     if (!postId) return;
@@ -100,7 +113,9 @@ export default function PostDetailPage() {
     try {
       const post = await postAPI.getById(postId);
       setRawPost(post);
-      setLikesCount(post.reactionCount ?? 0);
+      setIsLiked(post.isPositiveReacted === true);
+      setIsDisliked(post.isNegativeReacted === true);
+      setReactionCount(post.reactionCount ?? 0);
     } catch (e) {
       console.error(e);
       toast({ title: 'Error', description: 'Failed to load post', variant: 'destructive' });
@@ -123,7 +138,7 @@ export default function PostDetailPage() {
   const loadComments = useCallback(async () => {
     if (!postId) return;
     try {
-      const list = await commentAPI.getByPost(postId); 
+      const list = await commentAPI.getByPost(postId);
       const tree = mapCommentsToUITree(list, undefined, 2);
       setComments(tree);
     } catch (e) {
@@ -132,16 +147,15 @@ export default function PostDetailPage() {
   }, [postId]);
 
   const loadOwnerInformation = useCallback(async () => {
-    if (!postId) return
+    if (!postId) return;
     try {
-      const user = await userAPI.getById(rawPost?.authorId ?? "")
-      const postOwner = mapUserToPostOwner(user)
+      const user = await userAPI.getById(rawPost?.authorId ?? '');
+      const postOwner = mapUserToPostOwner(user);
       setOwner(postOwner);
+    } catch (e) {
+      console.error('Failed to load post owner information');
     }
-    catch (e) {
-      console.error('Failed to load post owner information')
-    }
-  }, [postId])
+  }, [postId, rawPost?.authorId]);
 
   useEffect(() => {
     loadPost();
@@ -150,25 +164,68 @@ export default function PostDetailPage() {
     loadOwnerInformation();
   }, [loadPost, loadMaterials, loadComments, loadOwnerInformation]);
 
-  const handleLike = async () => {
+  type ReactionKind = 'like' | 'dislike';
+
+  const handleReact = async (kind: ReactionKind) => {
     if (!profile?.id || !postId) {
-      toast({ title: 'Sign in required', description: 'Please sign in to like posts.', variant: 'destructive' });
+      toast({
+        title: 'Sign in required',
+        description: 'Please sign in to react.',
+        variant: 'destructive',
+      });
       return;
     }
-    const already = isLiked;
-    setIsLiked(!already);
-    setLikesCount((c) => c + (already ? -1 : 1));
+
+    const currLike = isLiked;
+    const currDislike = isDisliked;
+    const wantLike = kind === 'like';
+    const wantDislike = kind === 'dislike';
+
+    let action: 'set-like' | 'set-dislike' | 'clear' = 'set-like';
+    let delta = 0;
+
+    if ((currLike && wantLike) || (currDislike && wantDislike)) {
+      action = 'clear';
+      delta = -1;
+    } else if (!currLike && !currDislike) {
+      action = wantLike ? 'set-like' : 'set-dislike';
+      delta = +1;
+    } else {
+      action = wantLike ? 'set-like' : 'set-dislike';
+      delta = 0;
+    }
+
+    const prev = { isLiked: currLike, isDisliked: currDislike, reactionCount };
+    setIsLiked(action === 'set-like');
+    setIsDisliked(action === 'set-dislike');
+    setReactionCount((c) => Math.max(0, c + delta));
+
     try {
-      if (already) {
-        await reactionAPI.remove({ postId });
-        toast({ title: 'Success', description: 'Removed like' });
-      } else {
+      if (action === 'clear') {
+        await reactionAPI.removePost(postId);
+        toast({ title: 'Success', description: 'Reaction cleared' });
+      } else if (action === 'set-like') {
         await reactionAPI.react({ postId, isPositive: true });
-        toast({ title: 'Success', description: 'Post liked' });
+        toast({ title: 'Success', description: 'Liked post' });
+      } else {
+        await reactionAPI.react({ postId, isPositive: false });
+        toast({ title: 'Success', description: 'Disliked post' });
       }
+
+      setRawPost((p) =>
+        p
+          ? {
+            ...p,
+            isPositiveReacted: action === 'set-like' ? true : action === 'clear' ? null : false,
+            isNegativeReacted: action === 'set-dislike' ? true : action === 'clear' ? null : false,
+            reactionCount: Math.max(0, (p.reactionCount ?? 0) + delta),
+          }
+          : p
+      );
     } catch (e) {
-      setIsLiked(already);
-      setLikesCount((c) => c + (already ? 1 : -1));
+      setIsLiked(prev.isLiked);
+      setIsDisliked(prev.isDisliked);
+      setReactionCount(prev.reactionCount);
       console.error(e);
       toast({ title: 'Error', description: 'Failed to update reaction', variant: 'destructive' });
     }
@@ -177,7 +234,11 @@ export default function PostDetailPage() {
   const handleSubmitComment = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
     if (!profile?.id || !postId || !newComment.trim()) {
-      toast({ title: 'Sign in required', description: 'Please sign in to comment.', variant: 'destructive' });
+      toast({
+        title: 'Sign in required',
+        description: 'Please sign in to comment.',
+        variant: 'destructive',
+      });
       return;
     }
     setSubmittingComment(true);
@@ -189,7 +250,7 @@ export default function PostDetailPage() {
       };
       const created = await commentAPI.create(payload);
 
-      setComments(prev => [
+      setComments((prev) => [
         ...prev,
         {
           ...created,
@@ -210,9 +271,47 @@ export default function PostDetailPage() {
     }
   };
 
+  const handleSubmitReply = async (parentId: string) => {
+    if (!profile?.id || !postId) {
+      toast({
+        title: 'Sign in required',
+        description: 'Please sign in to reply.',
+        variant: 'destructive',
+      });
+      return;
+    }
+
+    const text = (replyText[parentId] ?? '').trim();
+    if (!text) return; // không gửi nếu trống
+
+    try {
+      const payload: CommentRequestDto = {
+        postId,
+        content: text,
+        parentCommentId: parentId,
+      };
+
+      const created = await commentAPI.create(payload);
+
+      setComments((prev) => insertReplyIntoTree(prev, parentId, created, 2));
+
+      setReplyText((m) => ({ ...m, [parentId]: '' }));
+      setReplyOpen((m) => ({ ...m, [parentId]: false }));
+
+      toast({ title: 'Success', description: 'Reply posted successfully' });
+    } catch (e) {
+      console.error(e);
+      toast({ title: 'Error', description: 'Failed to post reply.', variant: 'destructive' });
+    }
+  };
+
   const toggleCommentLike = async (commentId: string) => {
     if (!profile?.id) {
-      toast({ title: 'Sign in required', description: 'Please sign in to like comments.', variant: 'destructive' });
+      toast({
+        title: 'Sign in required',
+        description: 'Please sign in to like comments.',
+        variant: 'destructive',
+      });
       return;
     }
 
@@ -227,43 +326,20 @@ export default function PostDetailPage() {
 
     const already = current?.isLiked ?? false;
 
-    // optimistic UI
     const snapshot = comments;
     setComments(updateCommentLikeOptimistic(comments, commentId, !already));
     try {
       if (already) {
-        await reactionAPI.remove({ commentId });
+        await reactionAPI.removeComment(commentId);
         toast({ title: 'Success', description: 'Removed like' });
       } else {
         await reactionAPI.react({ commentId, isPositive: true });
         toast({ title: 'Success', description: 'Comment liked' });
       }
     } catch (e) {
-      // rollback
       setComments(snapshot);
       console.error(e);
       toast({ title: 'Error', description: 'Failed to update reaction', variant: 'destructive' });
-    }
-  };
-
-  const handleSubmitReply = async (parentId: string) => {
-    if (!profile?.id || !postId) {
-      toast({ title: 'Sign in required', description: 'Please sign in to reply.', variant: 'destructive' });
-      return;
-    }
-    const text = (replyText[parentId] ?? '').trim();
-    if (!text) return;
-
-    try {
-      const payload: CommentRequestDto = { postId, content: text, parentCommentId: parentId };
-      const created = await commentAPI.create(payload);
-      setComments(prev => insertReplyIntoTree(prev, parentId, created, 2));
-      setReplyText(m => ({ ...m, [parentId]: '' }));
-      setReplyOpen(m => ({ ...m, [parentId]: false }));
-      toast({ title: 'Success', description: 'Reply posted successfully' });
-    } catch (e) {
-      console.error(e);
-      toast({ title: 'Error', description: 'Failed to post reply.', variant: 'destructive' });
     }
   };
 
@@ -274,7 +350,9 @@ export default function PostDetailPage() {
           <Button variant="ghost" size="icon" onClick={() => router.back()}>
             <ArrowLeft className="h-5 w-5" />
           </Button>
-          <div><p className="text-muted-foreground">Loading post...</p></div>
+          <div>
+            <p className="text-muted-foreground">Loading post...</p>
+          </div>
         </div>
         <Card className="p-12 text-center">
           <div className="animate-spin rounded-full h-12 w-12 border-b-2 mx-auto"></div>
@@ -294,16 +372,28 @@ export default function PostDetailPage() {
         <CardHeader className="flex flex-col md:flex-row md:items-start md:justify-between gap-4">
           <div className="flex items-start gap-3">
             <Avatar className="h-12 w-12">
-              <AvatarImage src={uiPost.author.avatar_url ?? undefined} alt={uiPost.author.full_name} />
-              <AvatarFallback>{uiPost.author.full_name?.charAt(0).toUpperCase()}</AvatarFallback>
+              <AvatarImage
+                src={uiPost.author.avatar_url ?? undefined}
+                alt={uiPost.author.full_name}
+              />
+              <AvatarFallback>
+                {uiPost.author.full_name?.charAt(0).toUpperCase()}
+              </AvatarFallback>
             </Avatar>
             <div className="min-w-0 space-y-1">
-              <Link href={`/profile/${uiPost.author.id}`} className="font-medium hover:underline block truncate">
+              <Link
+                href={`/profile/${uiPost.author.id}`}
+                className="font-medium hover:underline block truncate"
+              >
                 {uiPost.author.full_name}
               </Link>
               <div className="flex items-center gap-2 text-xs text-muted-foreground">
-                <Badge variant="secondary">{uiPost.author.reputation_points ?? 0} pts</Badge>
-                <span>{formatDistanceToNow(new Date(uiPost.created_at), { addSuffix: true })}</span>
+                <Badge variant="secondary">
+                  {uiPost.author.reputation_points ?? 0} pts
+                </Badge>
+                <span>
+                  {formatDistanceToNow(new Date(uiPost.created_at), { addSuffix: true })}
+                </span>
               </div>
             </div>
           </div>
@@ -327,8 +417,12 @@ export default function PostDetailPage() {
             {/* tags */}
             {uiPost.tags?.length > 0 && (
               <div className="flex flex-wrap gap-2">
-                {uiPost.tags.map(t => (
-                  <Badge key={t.id} variant="outline" style={t.color ? { borderColor: t.color, color: t.color } : {}}>
+                {uiPost.tags.map((t) => (
+                  <Badge
+                    key={t.id}
+                    variant="outline"
+                    style={t.color ? { borderColor: t.color, color: t.color } : {}}
+                  >
                     {t.name}
                   </Badge>
                 ))}
@@ -336,7 +430,9 @@ export default function PostDetailPage() {
             )}
           </div>
 
-          <p className="text-base leading-relaxed whitespace-pre-wrap">{uiPost.content}</p>
+          <p className="text-base leading-relaxed whitespace-pre-wrap">
+            {uiPost.content}
+          </p>
 
           {/* Attachments */}
           {(images.length > 0 || documents.length > 0) && (
@@ -355,7 +451,12 @@ export default function PostDetailPage() {
                       onClick={() => openPreview(img.fileUrl)}
                       title={img.title}
                     >
-                      <img src={img.fileUrl} alt={img.title} className="object-cover w-full h-full" loading="lazy" />
+                      <img
+                        src={img.fileUrl}
+                        alt={img.title}
+                        className="object-cover w-full h-full"
+                        loading="lazy"
+                      />
                     </button>
                   ))}
                 </div>
@@ -365,7 +466,10 @@ export default function PostDetailPage() {
               {documents.length > 0 && (
                 <div className="space-y-2">
                   {documents.map((doc) => (
-                    <div key={doc.id} className="flex items-center justify-between rounded-md border p-2">
+                    <div
+                      key={doc.id}
+                      className="flex items-center justify-between rounded-md border p-2"
+                    >
                       <div className="flex items-center gap-2 min-w-0">
                         <FileText className="h-4 w-4" />
                         <span className="truncate">{doc.title || doc.fileUrl}</span>
@@ -392,10 +496,27 @@ export default function PostDetailPage() {
 
           {/* actions */}
           <div className="flex items-center gap-4 pt-2">
-            <Button variant="ghost" size="sm" onClick={handleLike} className={isLiked ? 'text-red-500' : ''}>
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={() => handleReact('like')}
+              className={isLiked ? 'text-red-500' : ''}
+              title={isLiked ? 'Unlike' : 'Like'}
+            >
               <Heart className={`mr-2 h-4 w-4 ${isLiked ? 'fill-red-500' : ''}`} />
-              {likesCount}
+              {reactionCount}
             </Button>
+
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={() => handleReact('dislike')}
+              className={isDisliked ? 'text-blue-500' : ''}
+              title={isDisliked ? 'Clear dislike' : 'Dislike'}
+            >
+              <ThumbsDown className={`mr-2 h-4 w-4 ${isDisliked ? 'fill-blue-500' : ''}`} />
+            </Button>
+
             <div className="flex items-center gap-1.5 text-sm text-muted-foreground">
               <MessageSquare className="h-4 w-4" />
               <span>{uiPost.comments_count}</span>
@@ -407,8 +528,12 @@ export default function PostDetailPage() {
       {/* Image preview */}
       <Dialog open={previewOpen} onOpenChange={setPreviewOpen}>
         <DialogContent className="max-w-3xl">
-          <DialogHeader><DialogTitle>Image preview</DialogTitle></DialogHeader>
-          {previewUrl && <img src={previewUrl} alt="preview" className="w-full h-auto rounded-lg" />}
+          <DialogHeader>
+            <DialogTitle>Image preview</DialogTitle>
+          </DialogHeader>
+          {previewUrl && (
+            <img src={previewUrl} alt="preview" className="w-full h-auto rounded-lg" />
+          )}
         </DialogContent>
       </Dialog>
 
@@ -491,7 +616,9 @@ function CommentItem({
                 {c.authorUsername}
               </Link>
               {typeof c.authorPoint === 'number' && (
-                <Badge variant="secondary" className="text-xs">{c.authorPoint} pts</Badge>
+                <Badge variant="secondary" className="text-xs">
+                  {c.authorPoint} pts
+                </Badge>
               )}
             </div>
             <p className="text-sm">{c.content}</p>
@@ -542,7 +669,7 @@ function CommentItem({
 
       {c.children?.length > 0 && (
         <div className="pl-8 space-y-3">
-          {c.children.map(child => (
+          {c.children.map((child) => (
             <CommentItem
               key={child.id}
               c={child}
