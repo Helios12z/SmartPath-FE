@@ -141,12 +141,12 @@ export interface MessageRequestDto {
 }
 
 export interface Notification {
-  id: string;
-  receiver_id: string;
+  id: string 
+  type: string;
   content: string;
-  is_read: boolean;
-  created_at: string;
-  link?: string | null;
+  isRead: boolean;
+  createdAt: string;
+  url: string | null;
 }
 
 export interface SystemLog {
@@ -234,4 +234,20 @@ export interface UserRequestDto {
   bio?: string;
   avatarUrl?: string;
   role?: UserRole; 
+}
+
+export interface FriendshipRequestDto { followedUserId: string; }
+export interface FriendshipResponseDto {
+  followerId: string;
+  followedUserId: string;
+  createdAt: string;
+}
+export interface FriendSummaryDto {
+  id: string;                 // userId của friend
+  username: string;
+  fullName?: string;
+  avatarUrl?: string | null;
+  point?: number;
+  primaryBadge?: { id: string; name: string } | null;
+  isMutual?: boolean;
 }
