@@ -30,6 +30,9 @@ import { UserBadge } from '@/components/badges/UserBadge';
 import { userAPI } from '@/lib/api/userAPI';
 import { friendshipAPI } from '@/lib/api/friendshipAPI';
 import AvatarCropDialog from '@/components/profile/AvatarCropDialog';
+import { postAPI } from '@/lib/api/postAPI';
+import { mapPostToUI } from '@/lib/mappers/postMapper';
+import type { UIPost } from '@/lib/mappers/postMapper';
 
 type ProfileStats = {
   postsCount: number;
@@ -49,7 +52,7 @@ export default function ProfilePage() {
   const [avatarDialogOpen, setAvatarDialogOpen] = useState(false);
   const [profileData, setProfileData] = useState<UserProfile | null>(null);
   const [primaryBadge, setPrimaryBadge] = useState<BadgeAward | null>(null);
-  const [posts, setPosts] = useState<any[]>([]);
+  const [posts, setPosts] = useState<UIPost[]>([]);
   const [stats, setStats] = useState<ProfileStats>({
     postsCount: 0,
     commentsCount: 0,
@@ -112,6 +115,25 @@ export default function ProfilePage() {
       setLoading(false);
     }
   }, [profileId, toast]);
+
+  const loadPostsOfUser = useCallback(async (userId: string) => {
+    try {
+      const raw = await postAPI.getByUser(userId);
+      const mapped = raw.map(mapPostToUI);
+
+      // Tính thống kê cơ bản
+      const postsCount = mapped.length;
+      const commentsCount = mapped.reduce((acc, p) => acc + (p.comments_count ?? 0), 0);
+      const likesReceived = mapped.reduce((acc, p) => acc + (p.positiveReactionCount ?? 0), 0);
+
+      setPosts(mapped);
+      setStats({ postsCount, commentsCount, likesReceived });
+    } catch (e) {
+      console.error('Failed to load user posts', e);
+      setPosts([]);
+      setStats({ postsCount: 0, commentsCount: 0, likesReceived: 0 });
+    }
+  }, []);
 
   // ===== NEW: load quan hệ giữa currentUser và profileId
   const loadRelation = useCallback(async () => {
@@ -192,6 +214,11 @@ export default function ProfilePage() {
       bio: profileData.bio ?? '',
     });
   }, [isEditOpen, profileData]);
+
+  useEffect(() => {
+    if (!profileId) return;
+    loadPostsOfUser(profileId);
+  }, [profileId, loadPostsOfUser]);
 
   const prune = <T extends Record<string, any>>(obj: T): Partial<T> => {
     const out: Partial<T> = {};
@@ -640,7 +667,7 @@ export default function ProfilePage() {
             <TabsTrigger value="activity">Activity</TabsTrigger>
           </TabsList>
 
-        <TabsContent value="posts" className="space-y-4 mt-6">
+          <TabsContent value="posts" className="space-y-4 mt-6">
             {posts.length === 0 ? (
               <Card className="p-12 text-center">
                 <p className="text-muted-foreground">
