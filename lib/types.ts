@@ -57,11 +57,12 @@ export interface PostResponseDto {
   authorUsername?: string | null;
   authorId: string;
   authorAvatarUrl?: string | null;
-  reactionCount: number;
   commentCount: number;
   categories?: string[];
   isPositiveReacted: boolean | null;
   isNegativeReacted: boolean | null;
+  negativeReactionCount: number;
+  positiveReactionCount: number;
 }
 
 export interface PostRequestDto {
@@ -88,6 +89,8 @@ export interface CommentResponseDto {
   replies?: CommentResponseDto[];  
   isPositiveReacted: boolean | null;
   isNegativeReacted: boolean | null;
+  negativeReactionCount: number;
+  positiveReactionCount: number;
 }
 
 export type ReactionRequestDto = {

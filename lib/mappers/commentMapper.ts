@@ -1,104 +1,214 @@
-import type { CommentResponseDto } from "../types";
+import type { CommentResponseDto } from '@/lib/types';
 
-export type UIReactionMeta = {
-  likes: number;
-  myReactionIsPositive: boolean | null; 
-};
+export type UIComment = {
+  id: string;
+  post_id: string;
+  parent_comment_id: string | null;
 
-export type UIComment = CommentResponseDto & {
+  content: string;
+  created_at: string;
+
+  author: {
+    id: string;
+    full_name: string;
+    avatar_url: string | null;
+    reputation_points: number;
+    primaryBadge: { id: string; name: string; point: number } | null;
+  };
+
+  isPositiveReacted: boolean | null;
+  isNegativeReacted: boolean | null;
+  positiveReactionCount: number;
+  negativeReactionCount: number;
+
+  // tree helpers
   depth: number;
-  likes: number;
-  isLiked: boolean;
   children: UIComment[];
 };
 
-const withReaction = (
+export function mapCommentToUI(
   c: CommentResponseDto,
-  meta?: UIReactionMeta
-): Pick<UIComment, "likes" | "isLiked"> => ({
-  likes: meta?.likes ?? 0,
-  isLiked: meta?.myReactionIsPositive === true,
-});
+  opts?: {
+    postId?: string;
+    parentCommentId?: string | null;
+    depth?: number;
+  }
+): UIComment {
+  return {
+    id: c.id,
+    post_id: opts?.postId ?? '', 
+    parent_comment_id: typeof opts?.parentCommentId !== 'undefined' ? opts?.parentCommentId : null,
 
-export function mapCommentsToUITree(
-  comments: CommentResponseDto[],
-  metaById?: Record<string, UIReactionMeta>,
-  maxDepth = 2
-): UIComment[] {
-  const mapNode = (node: CommentResponseDto, depth: number): UIComment => {
-    const meta = withReaction(node, metaById?.[node.id]);
-    const canHaveChildren = depth < maxDepth;
-    const childrenSrc = Array.isArray(node.replies) ? node.replies : [];
+    content: c.content,
+    created_at: c.createdAt,
 
-    return {
-      ...node,
-      ...meta,
-      depth,
-      children: canHaveChildren
-        ? childrenSrc.map((child) => mapNode(child, depth + 1))
-        : [], 
-    };
+    author: {
+      id: c.authorId,
+      full_name: c.authorUsername ?? 'Unknown',
+      avatar_url: c.authorAvatarUrl ?? null,
+      reputation_points: c.authorPoint ?? 0,
+      primaryBadge: null, 
+    },
+
+    isPositiveReacted: c.isPositiveReacted,
+    isNegativeReacted: c.isNegativeReacted,
+    positiveReactionCount: c.positiveReactionCount ?? 0,
+    negativeReactionCount: c.negativeReactionCount ?? 0,
+
+    depth: opts?.depth ?? 0,
+    children: (c.replies ?? []).map((child) =>
+      mapCommentToUI(child, {
+        postId: opts?.postId,
+        parentCommentId: c.id,
+        depth: (opts?.depth ?? 0) + 1,
+      })
+    ),
   };
-
-  return comments.map((c) => mapNode(c, 0));
 }
 
-export function updateCommentLikeOptimistic(
-  tree: UIComment[],
-  commentId: string,
-  toLiked: boolean
+export function mapCommentsToUITree(
+  list: CommentResponseDto[],
+  postId?: string,
+  maxDepth: number = 999
 ): UIComment[] {
-  const walk = (nodes: UIComment[]): UIComment[] =>
-    nodes.map((n) => {
-      if (n.id === commentId) {
-        const delta = toLiked ? +1 : -1;
-        return {
-          ...n,
-          isLiked: toLiked,
-          likes: Math.max(0, (n.likes ?? 0) + delta),
-        };
-      }
-      return { ...n, children: walk(n.children ?? []) };
-    });
+  const hasParentField = list.some((c: any) => typeof (c as any).parentCommentId !== 'undefined');
 
-  return walk(tree);
+  if (hasParentField) {
+    const byId = new Map<string, UIComment>();
+
+    for (const c of list) {
+      const parentId = (c as any).parentCommentId ?? null;
+      const ui = mapCommentToUI(c, { postId, parentCommentId: parentId, depth: 0 });
+      byId.set(c.id, { ...ui, children: [] }); 
+    }
+
+    const roots: UIComment[] = [];
+    for (const c of list) {
+      const parentId = (c as any).parentCommentId ?? null;
+      const ui = byId.get(c.id)!;
+
+      if (parentId && byId.has(parentId)) {
+        const parent = byId.get(parentId)!;
+        const nextDepth = (parent.depth ?? 0) + 1;
+        if (nextDepth <= maxDepth) {
+          ui.depth = nextDepth;
+          parent.children.push(ui);
+        }
+      } else {
+        roots.push(ui);
+      }
+    }
+    return roots;
+  }
+
+  const childIds = new Set<string>();
+  for (const c of list) {
+    for (const r of (c.replies ?? [])) childIds.add(r.id);
+  }
+  const roots = list.filter((c) => !childIds.has(c.id));
+
+  const recur = (node: CommentResponseDto, depth: number, parentId: string | null): UIComment => {
+    const ui = mapCommentToUI(node, { postId, parentCommentId: parentId, depth });
+    if (depth >= maxDepth) return { ...ui, children: [] };
+    const kids = (node.replies ?? []).map((child) => recur(child, depth + 1, node.id));
+    return { ...ui, children: kids };
+  };
+
+  return roots.map((c) => recur(c, 0, null));
 }
 
 export function insertReplyIntoTree(
   tree: UIComment[],
   parentId: string,
   created: CommentResponseDto,
-  maxDepth = 2
+  maxDepth: number = 999
+): UIComment[] {
+  const dfs = (nodes: UIComment[]): UIComment[] => {
+    return nodes.map((n) => {
+      if (n.id === parentId) {
+        const child = mapCommentToUI(created, {
+          postId: n.post_id,
+          parentCommentId: n.id,
+          depth: n.depth + 1,
+        });
+        if (n.depth + 1 > maxDepth) return n; // quá depth thì bỏ
+        return { ...n, children: [...(n.children ?? []), child] };
+      }
+      if (n.children?.length) {
+        return { ...n, children: dfs(n.children) };
+      }
+      return n;
+    });
+  };
+  return dfs(tree);
+}
+
+export function updateCommentReactionOptimistic(
+  tree: UIComment[],
+  commentId: string,
+  action: 'clear' | 'set-like' | 'set-dislike'
 ): UIComment[] {
   const walk = (nodes: UIComment[]): UIComment[] =>
     nodes.map((n) => {
-      if (n.id === parentId) {
-        const childDepth = n.depth + 1;
-        if (childDepth <= maxDepth) {
-          const uiChild: UIComment = {
-            ...created,
-            depth: childDepth,
-            likes: 0,
-            isLiked: false,
-            children: [],
-          };
-          return { ...n, children: [...(n.children ?? []), uiChild] };
+      if (n.id === commentId) {
+        let isPos = n.isPositiveReacted;
+        let isNeg = n.isNegativeReacted;
+        let pos = n.positiveReactionCount;
+        let neg = n.negativeReactionCount;
+
+        if (action === 'clear') {
+          if (isPos) {
+            pos = Math.max(0, pos - 1);
+            isPos = null;
+          } else if (isNeg) {
+            neg = Math.max(0, neg - 1);
+            isNeg = null;
+          }
+        } else if (action === 'set-like') {
+          if (isNeg) {
+            neg = Math.max(0, neg - 1);
+            pos = pos + 1;
+          } else if (!isPos) {
+            pos = pos + 1;
+          }
+          isPos = true;
+          isNeg = false;
+        } else if (action === 'set-dislike') {
+          if (isPos) {
+            pos = Math.max(0, pos - 1);
+            neg = neg + 1;
+          } else if (!isNeg) {
+            neg = neg + 1;
+          }
+          isPos = false;
+          isNeg = true;
         }
-        return n; 
+
+        return {
+          ...n,
+          isPositiveReacted: isPos,
+          isNegativeReacted: isNeg,
+          positiveReactionCount: pos,
+          negativeReactionCount: neg,
+        };
       }
-      return { ...n, children: walk(n.children ?? []) };
+      if (n.children?.length) {
+        return { ...n, children: walk(n.children) };
+      }
+      return n;
     });
+
   return walk(tree);
 }
 
-export function findCommentById(
+export function updateCommentLikeOptimistic(
   tree: UIComment[],
-  id: string
-): UIComment | undefined {
-  for (const n of tree) {
-    if (n.id === id) return n;
-    const hit = findCommentById(n.children ?? [], id);
-    if (hit) return hit;
-  }
-  return undefined;
+  commentId: string,
+  like: boolean
+): UIComment[] {
+  return updateCommentReactionOptimistic(
+    tree,
+    commentId,
+    like ? 'set-like' : 'clear'
+  );
 }

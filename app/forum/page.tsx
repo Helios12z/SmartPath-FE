@@ -26,7 +26,7 @@ const FETCH_STRATEGIES: Record<
 > = {
   all: async () => postAPI.getAll(),
   byUser: async (args) => (args?.userId ? postAPI.getByUser(args.userId) : []),
-  recommended: async () => postAPI.getAll(), //TODO: Change to recommendation fetch endpoint instead of getting all posts
+  recommended: async () => postAPI.getAll(), // TODO: replace by recommendation endpoint
 };
 
 export default function ForumPage() {
@@ -58,8 +58,10 @@ export default function ForumPage() {
     fetchPosts();
   }, [fetchPosts]);
 
+  // map sang UI
   const uiPosts: UIPost[] = useMemo(() => rawPosts.map(mapPostToUI), [rawPosts]);
 
+  // filter theo từ khóa
   const filteredPosts = useMemo(() => {
     const q = searchQuery.trim().toLowerCase();
     if (!q) return uiPosts;
@@ -68,20 +70,31 @@ export default function ForumPage() {
     );
   }, [uiPosts, searchQuery]);
 
+  // Popular: sort theo (positive - negative)
   const popularPosts = useMemo(
-    () => [...filteredPosts].sort((a, b) => b.likes_count - a.likes_count),
+    () =>
+      [...filteredPosts].sort(
+        (a, b) =>
+          (b.positiveReactionCount - b.negativeReactionCount) -
+          (a.positiveReactionCount - a.negativeReactionCount)
+      ),
     [filteredPosts]
   );
 
   type ReactionKind = 'like' | 'dislike';
 
+  // helper cập nhật 1 post trong rawPosts
   const mutateLocal = (postId: string, updater: (p: PostResponseDto) => PostResponseDto) => {
     setRawPosts((cur) => cur.map((p) => (p.id === postId ? updater(p) : p)));
   };
 
   const handleReact = async (postId: string, kind: ReactionKind) => {
     if (!profile?.id) {
-      toast({ title: 'Sign in required', description: 'Please sign in to react.', variant: 'destructive' });
+      toast({
+        title: 'Sign in required',
+        description: 'Please sign in to react.',
+        variant: 'destructive',
+      });
       return;
     }
 
@@ -90,34 +103,77 @@ export default function ForumPage() {
 
     const currPos = !!target.isPositiveReacted;
     const currNeg = !!target.isNegativeReacted;
-    const desiredPos = kind === 'like';
-    const desiredNeg = kind === 'dislike';
+    const wantPos = kind === 'like';
+    const wantNeg = kind === 'dislike';
 
-    let action: 'set-like' | 'set-dislike' | 'clear' = 'set-like';
-    let delta = 0;
+    // Xác định action
+    // - Nếu user bấm lại cùng loại đang bật -> clear
+    // - Nếu chưa có gì -> set theo muốn
+    // - Nếu đang là loại khác -> chuyển sang loại muốn
+    type Action = 'clear' | 'set-like' | 'set-dislike';
+    let action: Action;
 
-    if ((currPos && desiredPos) || (currNeg && desiredNeg)) {
+    if ((currPos && wantPos) || (currNeg && wantNeg)) {
       action = 'clear';
-      delta = -1;
-    } else if (!currPos && !currNeg) {
-      action = desiredPos ? 'set-like' : 'set-dislike';
-      delta = +1;
+    } else if (wantPos) {
+      action = 'set-like';
     } else {
-      action = desiredPos ? 'set-like' : 'set-dislike';
-      delta = 0;
+      action = 'set-dislike';
     }
 
     const prev = { ...target };
-    mutateLocal(postId, (p) => ({
-      ...p,
-      isPositiveReacted: action === 'set-like' ? true : action === 'clear' ? null : false,
-      isNegativeReacted: action === 'set-dislike' ? true : action === 'clear' ? null : false,
-      reactionCount: Math.max(0, (p.reactionCount ?? 0) + delta),
-    }));
+
+    // cập nhật lạc quan counters & flags dựa trên action
+    mutateLocal(postId, (p) => {
+      let pos = p.positiveReactionCount ?? 0;
+      let neg = p.negativeReactionCount ?? 0;
+      let isPos: boolean | null = p.isPositiveReacted;
+      let isNeg: boolean | null = p.isNegativeReacted;
+
+      if (action === 'clear') {
+        if (isPos) {
+          pos = Math.max(0, pos - 1);
+          isPos = null;
+        } else if (isNeg) {
+          neg = Math.max(0, neg - 1);
+          isNeg = null;
+        }
+      } else if (action === 'set-like') {
+        if (isNeg) {
+          // chuyển từ dislike -> like
+          neg = Math.max(0, neg - 1);
+          pos = pos + 1;
+        } else if (!isPos) {
+          // từ neutral -> like
+          pos = pos + 1;
+        }
+        isPos = true;
+        isNeg = false;
+      } else if (action === 'set-dislike') {
+        if (isPos) {
+          // chuyển từ like -> dislike
+          pos = Math.max(0, pos - 1);
+          neg = neg + 1;
+        } else if (!isNeg) {
+          // từ neutral -> dislike
+          neg = neg + 1;
+        }
+        isPos = false;
+        isNeg = true;
+      }
+
+      return {
+        ...p,
+        isPositiveReacted: isPos,
+        isNegativeReacted: isNeg,
+        positiveReactionCount: pos,
+        negativeReactionCount: neg,
+      };
+    });
 
     try {
       if (action === 'clear') {
-        await reactionAPI.removePost(postId );
+        await reactionAPI.removePost(postId);
         toast({ title: 'Success', description: 'Reaction cleared' });
       } else if (action === 'set-like') {
         await reactionAPI.react({ postId, isPositive: true });
@@ -127,6 +183,7 @@ export default function ForumPage() {
         toast({ title: 'Success', description: 'Disliked post' });
       }
     } catch (e) {
+      // revert nếu fail
       mutateLocal(postId, () => prev);
       console.error(e);
       toast({ title: 'Error', description: 'Failed to update reaction', variant: 'destructive' });

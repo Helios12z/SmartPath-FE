@@ -101,7 +101,7 @@ export function PostCard({
             aria-label={liked ? 'Unlike' : 'Like'}
           >
             <Heart className={`h-4 w-4 ${liked ? 'fill-red-500 text-red-500' : ''}`} />
-            <span>{post.likes_count}</span>
+            <span>{post.positiveReactionCount}</span>
           </button>
 
           {/* DISLIKE */}
@@ -112,6 +112,7 @@ export function PostCard({
             aria-label={disliked ? 'Clear dislike' : 'Dislike'}
           >
             <ThumbsDown className={`h-4 w-4 ${disliked ? 'fill-blue-500 text-blue-500' : ''}`} />
+            <span>{post.negativeReactionCount}</span>
           </button>
 
           {/* COMMENTS */}
