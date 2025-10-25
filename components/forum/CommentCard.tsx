@@ -7,8 +7,7 @@ import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { Badge } from '@/components/ui/badge';
 import { Textarea } from '@/components/ui/textarea';
 import { Button } from '@/components/ui/button';
-import { Heart, ThumbsDown, Send, ImagePlus, FilePlus2, FileText, X, UploadCloud } from 'lucide-react';
-import { ScrollArea } from '@/components/ui/scroll-area';
+import { Heart, ThumbsDown, Send, ImagePlus, FilePlus2, FileText, X } from 'lucide-react';
 
 import type { UIComment } from '@/lib/mappers/commentMapper';
 
@@ -20,11 +19,14 @@ interface CommentCardProps {
   comment: UIComment;
   onLike?: (id: string) => void;
   onDislike?: (id: string) => void;
-  // truyền file lên page để upload sau khi tạo reply
-  onSubmitReply?: (parentId: string, content: string, images: File[], docs: File[]) => Promise<void> | void;
+  onSubmitReply?: (
+    parentId: string,
+    content: string,
+    images: File[],
+    docs: File[]
+  ) => Promise<void> | void;
   canReply?: boolean;
   showChildren?: boolean;
-  // NEW: dùng để mở preview ảnh (tái sử dụng dialog ở Post Detail)
   onPreview?: (url: string) => void;
 }
 
@@ -132,7 +134,7 @@ export function CommentCard({
                           key={img.id}
                           type="button"
                           className="relative aspect-square overflow-hidden rounded-lg border hover:opacity-90"
-                          onClick={() => onPreview?.(img.fileUrl)} // nếu muốn reuse preview ở PostDetail
+                          onClick={() => onPreview?.(img.fileUrl)}
                           title={img.title}
                         >
                           <img src={img.fileUrl} alt={img.title} className="object-cover w-full h-full" />
@@ -202,35 +204,18 @@ export function CommentCard({
               </div>
 
               {canReply && comment.depth < 2 && replyOpen && onSubmitReply && (
-                <div className="mt-3 space-y-2">
-                  <Textarea
-                    placeholder="Reply..."
-                    value={replyText}
-                    onChange={(e) => setReplyText(e.target.value)}
-                    rows={2}
-                  />
+                <div className="mt-3 space-y-3">
+                  {/* Textarea + 2 icon góc phải-dưới */}
+                  <div className="relative">
+                    <Textarea
+                      placeholder="Reply..."
+                      value={replyText}
+                      onChange={(e) => setReplyText(e.target.value)}
+                      rows={3}
+                      className="pr-20" // chừa chỗ cho 2 icon
+                    />
 
-                  {/* Attachments for reply */}
-                  <div className="rounded-2xl border-2 border-dashed p-3">
-                    <div className="flex items-center gap-3">
-                      <div className="p-2 rounded-full border">
-                        <ImagePlus className="h-4 w-4" />
-                      </div>
-                      <div className="flex-1">
-                        <div className="text-sm font-medium">Add images</div>
-                        <div className="text-xs text-muted-foreground">
-                          JPG, PNG, WEBP
-                        </div>
-                      </div>
-                      <Button
-                        type="button"
-                        variant="secondary"
-                        onClick={() => document.getElementById(`reply-img-${comment.id}`)?.click()}
-                      >
-                        <UploadCloud className="h-4 w-4 mr-2" />
-                        Browse
-                      </Button>
-                    </div>
+                    {/* Hidden inputs */}
                     <input
                       id={`reply-img-${comment.id}`}
                       type="file"
@@ -239,46 +224,6 @@ export function CommentCard({
                       className="hidden"
                       onChange={(e) => onPickImages(e.target.files)}
                     />
-                    {images.length > 0 && (
-                      <ScrollArea className="mt-2 h-24">
-                        <div className="flex gap-2">
-                          {images.map((img) => (
-                            <div key={img.id} className="relative w-20 h-20 rounded border overflow-hidden">
-                              <img src={img.preview} className="object-cover w-full h-full" />
-                              <button
-                                type="button"
-                                className="absolute top-1 right-1 bg-background/90 rounded-full p-1 border"
-                                onClick={() => removeImage(img.id)}
-                              >
-                                <X className="h-3 w-3" />
-                              </button>
-                            </div>
-                          ))}
-                        </div>
-                      </ScrollArea>
-                    )}
-                  </div>
-
-                  <div className="rounded-2xl border-2 border-dashed p-3">
-                    <div className="flex items-center gap-3">
-                      <div className="p-2 rounded-full border">
-                        <FilePlus2 className="h-4 w-4" />
-                      </div>
-                      <div className="flex-1">
-                        <div className="text-sm font-medium">Add documents</div>
-                        <div className="text-xs text-muted-foreground">
-                          PDF, DOCX, XLSX, PPTX, ZIP, RAR
-                        </div>
-                      </div>
-                      <Button
-                        type="button"
-                        variant="secondary"
-                        onClick={() => document.getElementById(`reply-doc-${comment.id}`)?.click()}
-                      >
-                        <UploadCloud className="h-4 w-4 mr-2" />
-                        Browse
-                      </Button>
-                    </div>
                     <input
                       id={`reply-doc-${comment.id}`}
                       type="file"
@@ -287,22 +232,79 @@ export function CommentCard({
                       className="hidden"
                       onChange={(e) => onPickDocs(e.target.files)}
                     />
-                    {docs.length > 0 && (
-                      <div className="mt-2 space-y-2">
-                        {docs.map((d) => (
-                          <div key={d.id} className="flex items-center justify-between rounded border p-2">
-                            <div className="flex items-center gap-2">
-                              <FileText className="h-3.5 w-3.5" />
-                              <span className="text-xs truncate max-w-[180px]">{d.file.name}</span>
-                            </div>
-                            <button type="button" onClick={() => removeDoc(d.id)}>
-                              <X className="h-3.5 w-3.5" />
-                            </button>
-                          </div>
-                        ))}
-                      </div>
-                    )}
+
+                    {/* 2 icon ở góc phải-dưới */}
+                    <div className="absolute bottom-2 right-2 flex items-center gap-1.5">
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        size="icon"
+                        title="Attach document"
+                        onClick={() => document.getElementById(`reply-doc-${comment.id}`)?.click()}
+                      >
+                        <FilePlus2 className="h-4 w-4" />
+                      </Button>
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        size="icon"
+                        title="Attach image"
+                        onClick={() => document.getElementById(`reply-img-${comment.id}`)?.click()}
+                      >
+                        <ImagePlus className="h-4 w-4" />
+                      </Button>
+                    </div>
                   </div>
+
+                  {/* Previews gọn */}
+                  {(images.length > 0 || docs.length > 0) && (
+                    <div className="space-y-2">
+                      {images.length > 0 && (
+                        <div className="flex gap-2 overflow-x-auto py-1">
+                          {images.map((img) => (
+                            <div
+                              key={img.id}
+                              className="relative w-16 h-16 rounded-md overflow-hidden border shrink-0"
+                              title={img.file.name}
+                            >
+                              <img src={img.preview} className="object-cover w-full h-full" />
+                              <button
+                                type="button"
+                                className="absolute top-1 right-1 bg-background/90 rounded-full p-0.5 border"
+                                onClick={() => removeImage(img.id)}
+                                aria-label="Remove image"
+                              >
+                                <X className="h-3 w-3" />
+                              </button>
+                            </div>
+                          ))}
+                        </div>
+                      )}
+
+                      {docs.length > 0 && (
+                        <div className="flex flex-wrap gap-2">
+                          {docs.map((d) => (
+                            <div
+                              key={d.id}
+                              className="flex items-center gap-2 rounded border px-2 py-1 text-xs"
+                              title={d.file.name}
+                            >
+                              <FileText className="h-3.5 w-3.5" />
+                              <span className="max-w-[180px] truncate">{d.file.name}</span>
+                              <button
+                                type="button"
+                                className="ml-1"
+                                onClick={() => removeDoc(d.id)}
+                                aria-label="Remove document"
+                              >
+                                <X className="h-3.5 w-3.5" />
+                              </button>
+                            </div>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                  )}
 
                   <div className="flex justify-end">
                     <Button size="sm" onClick={handleSend} disabled={!replyText.trim()}>

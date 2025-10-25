@@ -126,6 +126,17 @@ export default function PostDetailPage() {
     setPreviewOpen(true);
   };
 
+  function countTree(nodes: UIComment[]): number {
+    let total = 0;
+    for (const n of nodes) {
+      total += 1;
+      if (n.children?.length) total += countTree(n.children);
+    }
+    return total;
+  }
+
+  const totalComments = useMemo(() => countTree(comments), [comments]);
+
   const loadPost = useCallback(async () => {
     if (!postId) return;
     setLoading(true);
@@ -746,124 +757,124 @@ export default function PostDetailPage() {
       {/* Comments */}
       <Card>
         <CardHeader>
-          <h2 className="text-xl font-semibold">Comments ({comments.length})</h2>
+          <h2 className="text-xl font-semibold">Comments ({totalComments})</h2>
         </CardHeader>
         <CardContent className="space-y-6">
           <form onSubmit={handleSubmitComment} className="space-y-3">
-            <Textarea
-              placeholder="Comment..."
-              value={newComment}
-              onChange={(e) => setNewComment(e.target.value)}
-              disabled={submittingComment}
-              rows={3}
-            />
+            <div className="relative">
+              <Textarea
+                placeholder="Comment..."
+                value={newComment}
+                onChange={(e) => setNewComment(e.target.value)}
+                disabled={submittingComment}
+                rows={3}
+                className="pr-20" 
+              />
 
-            {/* Attachments for NEW comment */}
-            <div className="space-y-3">
-              {/* IMAGES */}
-              <div
-                onDragOver={(e) => e.preventDefault()}
-                onDrop={(e) => { e.preventDefault(); onPickCImages(e.dataTransfer.files); }}
-                className="rounded-2xl border-2 border-dashed p-4 hover:bg-muted/40 transition cursor-pointer"
-                onClick={() => document.getElementById('c-image-input')?.click()}
-              >
-                <div className="flex items-center gap-3">
-                  <div className="p-2 rounded-full border">
-                    <ImagePlus className="h-4 w-4" />
-                  </div>
-                  <div className="flex-1">
-                    <div className="text-sm font-medium">Add images</div>
-                    <div className="text-xs text-muted-foreground">JPG, PNG, WEBP</div>
-                  </div>
-                  <Button type="button" variant="secondary" disabled={submittingComment}>
-                    <UploadCloud className="h-4 w-4 mr-2" />
-                    Browse
-                  </Button>
-                </div>
-                <input
-                  id="c-image-input"
-                  type="file"
-                  accept="image/jpeg,image/png,image/webp"
-                  multiple
-                  className="hidden"
-                  onChange={(e) => onPickCImages(e.target.files)}
-                />
-                {cImages.length > 0 && (
-                  <ScrollArea className="mt-3 h-24">
-                    <div className="flex gap-2">
-                      {cImages.map((img) => (
-                        <div key={img.id} className="relative w-20 h-20 rounded-lg overflow-hidden border">
-                          <img src={img.preview} alt={img.file.name} className="object-cover w-full h-full" />
-                          <button
-                            type="button"
-                            className="absolute top-1 right-1 bg-background/90 rounded-full p-1 border"
-                            onClick={(e) => { e.stopPropagation(); removeCImage(img.id); }}
-                            aria-label="Remove image"
-                          >
-                            <X className="h-3 w-3" />
-                          </button>
-                        </div>
-                      ))}
-                    </div>
-                  </ScrollArea>
-                )}
+              <input
+                id="c-image-input"
+                type="file"
+                accept="image/jpeg,image/png,image/webp"
+                multiple
+                className="hidden"
+                onChange={(e) => onPickCImages(e.target.files)}
+                disabled={submittingComment}
+              />
+              <input
+                id="c-doc-input"
+                type="file"
+                accept=".pdf,.docx,.xlsx,.pptx,.zip,.rar,application/pdf,application/vnd.openxmlformats-officedocument.wordprocessingml.document,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,application/vnd.openxmlformats-officedocument.presentationml.presentation,application/zip,application/vnd.rar,application/x-rar-compressed"
+                multiple
+                className="hidden"
+                onChange={(e) => onPickCDocs(e.target.files)}
+                disabled={submittingComment}
+              />
+
+              {/* 2 icon ở góc phải-dưới */}
+              <div className="absolute bottom-2 right-2 flex items-center gap-1.5">
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="icon"
+                  title="Attach document"
+                  onClick={() => document.getElementById('c-doc-input')?.click()}
+                  disabled={submittingComment}
+                >
+                  <FilePlus2 className="h-4 w-4" />
+                </Button>
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="icon"
+                  title="Attach image"
+                  onClick={() => document.getElementById('c-image-input')?.click()}
+                  disabled={submittingComment}
+                >
+                  <ImagePlus className="h-4 w-4" />
+                </Button>
               </div>
+            </div>
 
-              {/* DOCS */}
-              <div
-                onDragOver={(e) => e.preventDefault()}
-                onDrop={(e) => { e.preventDefault(); onPickCDocs(e.dataTransfer.files); }}
-                className="rounded-2xl border-2 border-dashed p-4 hover:bg-muted/40 transition cursor-pointer"
-                onClick={() => document.getElementById('c-doc-input')?.click()}
-              >
-                <div className="flex items-center gap-3">
-                  <div className="p-2 rounded-full border">
-                    <FilePlus2 className="h-4 w-4" />
+            {/* Previews gọn */}
+            {(cImages.length > 0 || cDocs.length > 0) && (
+              <div className="space-y-2">
+                {cImages.length > 0 && (
+                  <div className="flex gap-2 overflow-x-auto py-1">
+                    {cImages.map((img) => (
+                      <div
+                        key={img.id}
+                        className="relative w-20 h-20 rounded-md overflow-hidden border shrink-0"
+                        title={img.file.name}
+                      >
+                        <img src={img.preview} className="object-cover w-full h-full" />
+                        <button
+                          type="button"
+                          className="absolute top-1 right-1 bg-background/90 rounded-full p-0.5 border"
+                          onClick={() => removeCImage(img.id)}
+                          aria-label="Remove image"
+                        >
+                          <X className="h-3 w-3" />
+                        </button>
+                      </div>
+                    ))}
                   </div>
-                  <div className="flex-1">
-                    <div className="text-sm font-medium">Add documents</div>
-                    <div className="text-xs text-muted-foreground">PDF, DOCX, XLSX, PPTX, ZIP, RAR</div>
-                  </div>
-                  <Button type="button" variant="secondary" disabled={submittingComment}>
-                    <UploadCloud className="h-4 w-4 mr-2" />
-                    Browse
-                  </Button>
-                </div>
-                <input
-                  id="c-doc-input"
-                  type="file"
-                  accept=".pdf,.docx,.xlsx,.pptx,.zip,.rar,application/pdf,application/vnd.openxmlformats-officedocument.wordprocessingml.document,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,application/vnd.openxmlformats-officedocument.presentationml.presentation,application/zip,application/vnd.rar,application/x-rar-compressed"
-                  multiple
-                  className="hidden"
-                  onChange={(e) => onPickCDocs(e.target.files)}
-                />
+                )}
+
                 {cDocs.length > 0 && (
-                  <div className="mt-3 space-y-2">
+                  <div className="flex flex-wrap gap-2">
                     {cDocs.map((d) => (
-                      <div key={d.id} className="flex items-center justify-between rounded-md border p-2">
-                        <div className="flex items-center gap-2">
-                          <FileText className="h-4 w-4" />
-                          <span className="text-xs truncate max-w-[220px]">{d.file.name}</span>
-                        </div>
-                        <Button type="button" variant="ghost" size="icon" onClick={() => removeCDoc(d.id)}>
-                          <X className="h-4 w-4" />
-                        </Button>
+                      <div
+                        key={d.id}
+                        className="flex items-center gap-2 rounded border px-2 py-1 text-xs"
+                        title={d.file.name}
+                      >
+                        <FileText className="h-3.5 w-3.5" />
+                        <span className="max-w-[220px] truncate">{d.file.name}</span>
+                        <button
+                          type="button"
+                          className="ml-1"
+                          onClick={() => removeCDoc(d.id)}
+                          aria-label="Remove document"
+                        >
+                          <X className="h-3.5 w-3.5" />
+                        </button>
                       </div>
                     ))}
                   </div>
                 )}
               </div>
+            )}
 
-              {submittingComment && (cImages.length + cDocs.length) > 0 && (
-                <div className="space-y-1">
-                  <div className="flex items-center justify-between">
-                    <span className="text-xs text-muted-foreground">Uploading attachments…</span>
-                    <span className="text-xs">{cUploadProgress}%</span>
-                  </div>
-                  <Progress value={cUploadProgress} />
+            {/* Progress khi đang submit + có files */}
+            {submittingComment && (cImages.length + cDocs.length) > 0 && (
+              <div className="space-y-1">
+                <div className="flex items-center justify-between">
+                  <span className="text-xs text-muted-foreground">Uploading attachments…</span>
+                  <span className="text-xs">{cUploadProgress}%</span>
                 </div>
-              )}
-            </div>
+                <Progress value={cUploadProgress} />
+              </div>
+            )}
 
             <div className="flex justify-end">
               <Button type="submit" disabled={submittingComment || !newComment.trim()}>
