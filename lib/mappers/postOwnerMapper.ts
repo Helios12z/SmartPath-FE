@@ -9,7 +9,7 @@ export type PostOwner = {
 export function mapUserToPostOwner(p: UserProfile): PostOwner {
     return {
         id: p.id,
-        avatar_url: p.avatar_url??"",
+        avatar_url: p.avatarUrl??"",
         username: p.username
     }
 }

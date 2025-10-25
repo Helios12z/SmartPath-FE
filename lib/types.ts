@@ -4,17 +4,19 @@ export interface StoredUser {
   id: string;
   email: string;
   username: string;
-  phone_number?: string;
-  full_name: string;
-  field_of_study?: string | null;
+
+  fullName?: string | null;
+  phoneNumber?: string | null;
+  major?: string | null;
+  faculty?: string | null;
+  yearOfStudy?: number | null;
   bio?: string | null;
-  avatar_url?: string | null;
+  avatarUrl?: string | null;
+
   role: UserRole;
-  point?: number;
-  reputation_points: number;
-  password: string;            
-  created_at: string;
-  updated_at?: string;
+  point: number;
+
+  createdAt?: string;
 }
 
 export type UserProfile = Omit<StoredUser, 'password'>;
@@ -223,9 +225,13 @@ export interface BadgeAward extends Badge {
 export interface UserRequestDto {
   email: string;
   username: string;
-  full_name?: string;
-  phone_number?: string;
-  field_of_study?: string;
-  avatar_url?: string;
-  role?: string;
+  password?: string;
+  fullName?: string;
+  phoneNumber?: string;
+  major?: string;
+  faculty?: string;
+  yearOfStudy?: number;
+  bio?: string;
+  avatarUrl?: string;
+  role?: UserRole; 
 }

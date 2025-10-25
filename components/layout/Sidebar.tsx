@@ -2,6 +2,7 @@
 
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
+import { useMemo } from 'react';
 import { cn } from '@/lib/utils';
 import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
@@ -12,7 +13,6 @@ import {
   BookOpen,
   Users,
   UserPlus,
-  TrendingUp,
   Calendar,
   Settings,
   Award,
@@ -40,19 +40,46 @@ export function Sidebar() {
     { href: '/achievements', icon: Award, label: 'Achievements' },
   ];
 
+  // ---- Normalize profile fields (hỗ trợ cả key cũ) ----
+  const fullName =
+    (profile as any)?.fullName ??
+    (profile as any)?.full_name ??
+    '';
+
+  const point =
+    (profile as any)?.point ??
+    (profile as any)?.reputation_points ??
+    0;
+
+  const rawAvatar =
+    (profile as any)?.avatarUrl ??
+    (profile as any)?.avatar_url ??
+    undefined;
+
+  // Version ổn định: ưu tiên updatedAt từ BE; nếu chưa có, dùng avatarUpdatedAt do FE set sau khi đổi avatar
+  const avatarVersion =
+    (profile as any)?.updatedAt ??
+    (profile as any)?.avatarUpdatedAt ??
+    '';
+
+  const avatarSrc = useMemo(() => {
+    if (!rawAvatar) return undefined;
+    return avatarVersion ? `${rawAvatar}?v=${encodeURIComponent(avatarVersion)}` : rawAvatar;
+  }, [rawAvatar, avatarVersion]);
+
   return (
     <aside className="hidden lg:flex w-64 flex-col gap-4 p-4 border-r bg-slate-50/50 dark:bg-slate-950/50 min-h-[calc(100vh-4rem)] lg:sticky lg:top-16 lg:h-[calc(100vh-4rem)] lg:overflow-y-auto scrollbar-hide">
       <Card className="p-4">
         <div className="flex items-center gap-3">
           <Avatar className="h-12 w-12">
-            <AvatarImage src={profile?.avatar_url ?? undefined} alt={profile?.full_name} />
+            <AvatarImage src={avatarSrc} alt={fullName || 'Avatar'} />
             <AvatarFallback className="bg-gradient-to-br from-blue-500 to-blue-600 text-white font-semibold">
-              {profile?.full_name?.charAt(0).toUpperCase() || 'U'}
+              {fullName?.charAt(0)?.toUpperCase() || 'U'}
             </AvatarFallback>
           </Avatar>
           <div className="flex-1 min-w-0">
-            <p className="text-sm font-medium truncate">{profile?.full_name}</p>
-            <p className="text-xs text-muted-foreground">{profile?.reputation_points} reputation</p>
+            <p className="text-sm font-medium truncate">{fullName || 'User'}</p>
+            <p className="text-xs text-muted-foreground">{point} reputation</p>
           </div>
         </div>
       </Card>

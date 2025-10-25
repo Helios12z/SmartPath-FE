@@ -27,10 +27,11 @@ import {
 } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
 import { useToast } from '@/hooks/use-toast';
+import { useMemo } from 'react';
 
 export function Navbar() {
   const { theme, setTheme } = useTheme();
-  const { profile, logout, refreshProfile, loading } = useAuth();
+  const { profile, logout } = useAuth();
   const pathname = usePathname();
   const router = useRouter();
   const { toast } = useToast();
@@ -38,17 +39,10 @@ export function Navbar() {
   const handleSignOut = async () => {
     try {
       await logout();
-      toast({
-        title: 'Signed out',
-        description: 'You have been successfully signed out',
-      });
+      toast({ title: 'Signed out', description: 'You have been successfully signed out' });
       router.push('/auth/login');
-    } catch (error) {
-      toast({
-        title: 'Error',
-        description: 'Failed to sign out',
-        variant: 'destructive',
-      });
+    } catch {
+      toast({ title: 'Error', description: 'Failed to sign out', variant: 'destructive' });
     }
   };
 
@@ -59,10 +53,34 @@ export function Navbar() {
     { href: '/friends', label: 'Friends' },
   ];
 
+  // Chuẩn hoá role & point
+  const roleRaw = (profile as any)?.role ?? 'Student';
+  const roleLabel = typeof roleRaw === 'string' ? roleRaw : String(roleRaw);
+  const isAdmin = roleLabel.toLowerCase() === 'admin';
+  const points = (profile as any)?.point ?? 0;
+
+  // Hỗ trợ cả key cũ (avatar_url). KHÔNG dùng Date.now()
+  const rawAvatar =
+    (profile as any)?.avatarUrl ??
+    (profile as any)?.avatar_url ??
+    undefined;
+
+  // Version ổn định: ưu tiên profile.updatedAt từ BE; nếu chưa có, bạn có thể set avatarUpdatedAt trong AuthContext sau khi upload
+  const avatarVersion =
+    (profile as any)?.updatedAt ??
+    (profile as any)?.avatarUpdatedAt ??
+    '';
+
+  const avatarSrc = useMemo(() => {
+    if (!rawAvatar) return undefined;
+    return avatarVersion ? `${rawAvatar}?v=${encodeURIComponent(avatarVersion)}` : rawAvatar;
+  }, [rawAvatar, avatarVersion]);
+
   return (
     <nav className="sticky top-0 z-50 w-full border-b bg-white/95 backdrop-blur supports-[backdrop-filter]:bg-white/60 dark:bg-slate-950/95 dark:supports-[backdrop-filter]:bg-slate-950/60">
       <div className="container mx-auto px-4">
         <div className="flex h-16 items-center justify-between">
+          {/* Brand + nav links */}
           <div className="flex items-center gap-6">
             <Link href="/" className="flex items-center gap-2 font-semibold text-xl">
               <div className="p-1.5 bg-blue-500 rounded-lg">
@@ -87,14 +105,16 @@ export function Navbar() {
             )}
           </div>
 
+          {/* Right actions */}
           <div className="flex items-center gap-2">
             {profile ? (
               <>
+                {/* Search */}
                 <Button variant="ghost" size="icon" className="hidden sm:inline-flex">
                   <Search className="h-5 w-5" />
                 </Button>
 
-                {/* 🔔 Notifications */}
+                {/* Notifications */}
                 <DropdownMenu>
                   <DropdownMenuTrigger asChild>
                     <Button variant="ghost" size="icon" className="relative">
@@ -108,12 +128,12 @@ export function Navbar() {
                     <DropdownMenuLabel>Notifications</DropdownMenuLabel>
                     <DropdownMenuSeparator />
                     <div className="text-sm text-muted-foreground p-4 text-center">
-                      No new notifications
+                      Không có thông báo mới
                     </div>
                   </DropdownMenuContent>
                 </DropdownMenu>
 
-                {/* 🌗 Theme switch */}
+                {/* Theme switch */}
                 <Button
                   variant="ghost"
                   size="icon"
@@ -123,17 +143,14 @@ export function Navbar() {
                   <Moon className="absolute h-5 w-5 rotate-90 scale-0 transition-transform dark:rotate-0 dark:scale-100" />
                 </Button>
 
-                {/* 👤 User menu */}
+                {/* User dropdown */}
                 <DropdownMenu>
                   <DropdownMenuTrigger asChild>
                     <Button variant="ghost" className="relative h-10 w-10 rounded-full">
                       <Avatar className="h-10 w-10">
-                        <AvatarImage
-                          src={profile.avatar_url ?? undefined}
-                          alt={profile.full_name}
-                        />
+                        <AvatarImage src={avatarSrc} alt={profile?.fullName ?? 'Avatar'} />
                         <AvatarFallback>
-                          {profile.full_name?.charAt(0).toUpperCase() || 'U'}
+                          {profile?.fullName?.charAt(0)?.toUpperCase() || 'U'}
                         </AvatarFallback>
                       </Avatar>
                     </Button>
@@ -141,21 +158,19 @@ export function Navbar() {
                   <DropdownMenuContent align="end">
                     <DropdownMenuLabel>
                       <div className="flex flex-col space-y-1">
-                        <p className="text-sm font-medium">{profile.full_name}</p>
-                        <p className="text-xs text-muted-foreground">{profile.email}</p>
+                        <p className="text-sm font-medium">{profile?.fullName}</p>
+                        <p className="text-xs text-muted-foreground">{profile?.email}</p>
                         <div className="flex items-center gap-2 mt-1">
                           <Badge variant="secondary" className="text-xs">
-                            {profile.role}
+                            {roleLabel}
                           </Badge>
-                          <span className="text-xs text-muted-foreground">
-                            {profile.reputation_points} pts
-                          </span>
+                          <span className="text-xs text-muted-foreground">{points} pts</span>
                         </div>
                       </div>
                     </DropdownMenuLabel>
                     <DropdownMenuSeparator />
                     <DropdownMenuItem asChild>
-                      <Link href={`/profile/${profile.id}`} className="cursor-pointer">
+                      <Link href={`/profile/${profile?.id}`} className="cursor-pointer">
                         <User className="mr-2 h-4 w-4" />
                         Profile
                       </Link>
@@ -166,7 +181,7 @@ export function Navbar() {
                         Dashboard
                       </Link>
                     </DropdownMenuItem>
-                    {profile.role === 'admin' && (
+                    {isAdmin && (
                       <DropdownMenuItem asChild>
                         <Link href="/admin" className="cursor-pointer">
                           <Settings className="mr-2 h-4 w-4" />
@@ -182,13 +197,14 @@ export function Navbar() {
                   </DropdownMenuContent>
                 </DropdownMenu>
 
+                {/* Mobile menu icon */}
                 <Button variant="ghost" size="icon" className="md:hidden">
                   <Menu className="h-5 w-5" />
                 </Button>
               </>
             ) : (
               <>
-                {/* 🌗 Theme switch */}
+                {/* Theme switch (when logged out) */}
                 <Button
                   variant="ghost"
                   size="icon"
@@ -198,7 +214,7 @@ export function Navbar() {
                   <Moon className="absolute h-5 w-5 rotate-90 scale-0 transition-transform dark:rotate-0 dark:scale-100" />
                 </Button>
 
-                {/* 🔐 Auth buttons */}
+                {/* Auth buttons */}
                 <Link href="/auth/login">
                   <Button variant="ghost">Sign In</Button>
                 </Link>
