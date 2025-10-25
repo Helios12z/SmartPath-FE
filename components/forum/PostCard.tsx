@@ -124,12 +124,6 @@ export function PostCard({
             <MessageSquare className="h-4 w-4" />
             <span>{post.comments_count}</span>
           </Link>
-
-          {/* VIEWS */}
-          <div className="flex items-center gap-1.5 text-sm text-muted-foreground">
-            <Eye className="h-4 w-4" />
-            <span>{post.views ?? 0}</span>
-          </div>
         </div>
       </CardContent>
     </Card>
