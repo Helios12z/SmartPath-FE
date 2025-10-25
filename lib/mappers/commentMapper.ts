@@ -1,4 +1,13 @@
 import type { CommentResponseDto } from '@/lib/types';
+import type { MaterialResponse } from '../api/materialAPI';
+
+const isImageUrl = (url: string) => {
+  const clean = url.split('?')[0].toLowerCase();
+  return (
+    /\.(jpg|jpeg|png|webp|gif)$/.test(clean) ||
+    /imgbb\.com|i\.ibb\.co|ibb\.co/.test(url)
+  );
+};
 
 export type UIComment = {
   id: string;
@@ -24,6 +33,11 @@ export type UIComment = {
   // tree helpers
   depth: number;
   children: UIComment[];
+
+  // --- NEW (tuỳ chọn): materials gắn với comment ---
+  materials?: MaterialResponse[];
+  images?: MaterialResponse[];
+  documents?: MaterialResponse[];
 };
 
 export function mapCommentToUI(
@@ -36,8 +50,9 @@ export function mapCommentToUI(
 ): UIComment {
   return {
     id: c.id,
-    post_id: opts?.postId ?? '', 
-    parent_comment_id: typeof opts?.parentCommentId !== 'undefined' ? opts?.parentCommentId : null,
+    post_id: opts?.postId ?? '',
+    parent_comment_id:
+      typeof opts?.parentCommentId !== 'undefined' ? opts?.parentCommentId : null,
 
     content: c.content,
     created_at: c.createdAt,
@@ -47,7 +62,7 @@ export function mapCommentToUI(
       full_name: c.authorUsername ?? 'Unknown',
       avatar_url: c.authorAvatarUrl ?? null,
       reputation_points: c.authorPoint ?? 0,
-      primaryBadge: null, 
+      primaryBadge: null,
     },
 
     isPositiveReacted: c.isPositiveReacted,
@@ -71,7 +86,9 @@ export function mapCommentsToUITree(
   postId?: string,
   maxDepth: number = 999
 ): UIComment[] {
-  const hasParentField = list.some((c: any) => typeof (c as any).parentCommentId !== 'undefined');
+  const hasParentField = list.some(
+    (c: any) => typeof (c as any).parentCommentId !== 'undefined'
+  );
 
   if (hasParentField) {
     const byId = new Map<string, UIComment>();
@@ -79,7 +96,7 @@ export function mapCommentsToUITree(
     for (const c of list) {
       const parentId = (c as any).parentCommentId ?? null;
       const ui = mapCommentToUI(c, { postId, parentCommentId: parentId, depth: 0 });
-      byId.set(c.id, { ...ui, children: [] }); 
+      byId.set(c.id, { ...ui, children: [] });
     }
 
     const roots: UIComment[] = [];
@@ -103,14 +120,20 @@ export function mapCommentsToUITree(
 
   const childIds = new Set<string>();
   for (const c of list) {
-    for (const r of (c.replies ?? [])) childIds.add(r.id);
+    for (const r of c.replies ?? []) childIds.add(r.id);
   }
   const roots = list.filter((c) => !childIds.has(c.id));
 
-  const recur = (node: CommentResponseDto, depth: number, parentId: string | null): UIComment => {
+  const recur = (
+    node: CommentResponseDto,
+    depth: number,
+    parentId: string | null
+  ): UIComment => {
     const ui = mapCommentToUI(node, { postId, parentCommentId: parentId, depth });
     if (depth >= maxDepth) return { ...ui, children: [] };
-    const kids = (node.replies ?? []).map((child) => recur(child, depth + 1, node.id));
+    const kids = (node.replies ?? []).map((child) =>
+      recur(child, depth + 1, node.id)
+    );
     return { ...ui, children: kids };
   };
 
@@ -123,15 +146,15 @@ export function insertReplyIntoTree(
   created: CommentResponseDto,
   maxDepth: number = 999
 ): UIComment[] {
-  const dfs = (nodes: UIComment[]): UIComment[] => {
-    return nodes.map((n) => {
+  const dfs = (nodes: UIComment[]): UIComment[] =>
+    nodes.map((n) => {
       if (n.id === parentId) {
         const child = mapCommentToUI(created, {
           postId: n.post_id,
           parentCommentId: n.id,
           depth: n.depth + 1,
         });
-        if (n.depth + 1 > maxDepth) return n; // quá depth thì bỏ
+        if (n.depth + 1 > maxDepth) return n;
         return { ...n, children: [...(n.children ?? []), child] };
       }
       if (n.children?.length) {
@@ -139,7 +162,6 @@ export function insertReplyIntoTree(
       }
       return n;
     });
-  };
   return dfs(tree);
 }
 
@@ -206,9 +228,25 @@ export function updateCommentLikeOptimistic(
   commentId: string,
   like: boolean
 ): UIComment[] {
-  return updateCommentReactionOptimistic(
-    tree,
-    commentId,
-    like ? 'set-like' : 'clear'
-  );
+  return updateCommentReactionOptimistic(tree, commentId, like ? 'set-like' : 'clear');
+}
+
+export function attachMaterialsToTree(
+  tree: UIComment[],
+  materialsByCommentId: Record<string, MaterialResponse[]>
+): UIComment[] {
+  const dfs = (nodes: UIComment[]): UIComment[] =>
+    nodes.map((n) => {
+      const mats = materialsByCommentId[n.id] ?? [];
+      const imgs = mats.filter((m) => isImageUrl(m.fileUrl));
+      const docs = mats.filter((m) => !isImageUrl(m.fileUrl));
+      return {
+        ...n,
+        materials: mats,
+        images: imgs,
+        documents: docs,
+        children: dfs(n.children ?? []),
+      };
+    });
+  return dfs(tree);
 }

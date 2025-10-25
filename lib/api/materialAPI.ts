@@ -49,6 +49,9 @@ export const materialAPI = {
     return await fetchWrapper.get<MaterialResponse[]>(`/material/by-post/${postId}`);
   },
 
+  listByComment: async (commentId: string) =>
+    fetchWrapper.get<MaterialResponse[]>(`/material/by-comment/${commentId}`),
+
   delete: async (id: string): Promise<void> => {
     return await fetchWrapper.del<void>(`/material/${id}`);
   },

@@ -22,8 +22,8 @@ import {
   mapCommentsToUITree,
   insertReplyIntoTree,
   updateCommentReactionOptimistic,
-  mapCommentToUI,
   type UIComment,
+  attachMaterialsToTree
 } from '@/lib/mappers/commentMapper';
 
 import { Button } from '@/components/ui/button';
@@ -42,9 +42,16 @@ import {
   FileText,
   Download,
   ThumbsDown,
+  ImagePlus,
+  FilePlus2,
+  X,
+  UploadCloud
 } from 'lucide-react';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { CommentCard } from '@/components/forum/CommentCard';
+
+import { Progress } from '@/components/ui/progress';
+import { ScrollArea } from '@/components/ui/scroll-area';
 
 const toHttpUrl = (u: string) => {
   if (!u) return u;
@@ -73,6 +80,10 @@ const isImageUrl = (url: string) => {
   return /imgbb\.com|i\.ibb\.co|ibb\.co/.test(url);
 };
 
+type QueuedImage = { id: string; file: File; preview: string };
+type QueuedDoc = { id: string; file: File };
+const uid = () => Math.random().toString(36).slice(2);
+
 export default function PostDetailPage() {
   const { id: postId } = useParams<{ id: string }>();
   const router = useRouter();
@@ -94,6 +105,11 @@ export default function PostDetailPage() {
   const [comments, setComments] = useState<UIComment[]>([]);
   const [newComment, setNewComment] = useState('');
   const [submittingComment, setSubmittingComment] = useState(false);
+
+  //comment attachments
+  const [cImages, setCImages] = useState<QueuedImage[]>([]);
+  const [cDocs, setCDocs] = useState<QueuedDoc[]>([]);
+  const [cUploadProgress, setCUploadProgress] = useState(0);
 
   // reply states gộp vào CommentCard (local), không cần ở page nữa
 
@@ -143,7 +159,34 @@ export default function PostDetailPage() {
     if (!postId) return;
     try {
       const list = await commentAPI.getByPost(postId);
-      const tree = mapCommentsToUITree(list, postId, 2);
+      // 1) Build tree trước
+      let tree = mapCommentsToUITree(list, postId, 2);
+
+      // 2) Lấy tất cả commentId trong tree
+      const ids: string[] = [];
+      (function collect(nodes: UIComment[]) {
+        for (const n of nodes) {
+          ids.push(n.id);
+          if (n.children?.length) collect(n.children);
+        }
+      })(tree);
+
+      // 3) Gọi API lấy materials cho từng comment (song song)
+      const pairs = await Promise.all(
+        ids.map(async (cid) => {
+          try {
+            const mats = await materialAPI.listByComment(cid);
+            return [cid, mats] as [string, MaterialResponse[]];
+          } catch {
+            return [cid, []] as [string, MaterialResponse[]];
+          }
+        })
+      );
+      const byId = Object.fromEntries(pairs) as Record<string, MaterialResponse[]>;
+
+      // 4) Gắn materials vào tree
+      tree = attachMaterialsToTree(tree, byId);
+
       setComments(tree);
     } catch (e) {
       console.error('Failed to load comments', e);
@@ -314,17 +357,54 @@ export default function PostDetailPage() {
     return undefined;
   }
 
+  const onPickCImages = (files: FileList | null) => {
+    if (!files) return;
+    const accepted = Array.from(files).filter((f) =>
+      ['image/jpeg', 'image/png', 'image/webp'].includes(f.type)
+    );
+    const next = accepted.map((f) => ({ id: uid(), file: f, preview: URL.createObjectURL(f) }));
+    setCImages((p) => [...p, ...next]);
+    if (accepted.length !== files.length) {
+      toast({ title: 'Some images were skipped', description: 'Only JPG, PNG, WEBP', variant: 'destructive' });
+    }
+  };
+  const onPickCDocs = (files: FileList | null) => {
+    if (!files) return;
+    const allowed = [
+      'application/pdf',
+      'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+      'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+      'application/vnd.openxmlformats-officedocument.presentationml.presentation',
+      'application/zip',
+      'application/vnd.rar',
+      'application/x-rar-compressed',
+    ];
+    const accepted = Array.from(files).filter((f) => allowed.includes(f.type) || f.name.endsWith('.rar'));
+    const next = accepted.map((f) => ({ id: uid(), file: f }));
+    setCDocs((p) => [...p, ...next]);
+    if (accepted.length !== files.length) {
+      toast({ title: 'Some files were skipped', description: 'Unsupported type', variant: 'destructive' });
+    }
+  };
+  const removeCImage = (id: string) => {
+    setCImages((prev) => {
+      const t = prev.find((x) => x.id === id);
+      if (t) URL.revokeObjectURL(t.preview);
+      return prev.filter((x) => x.id !== id);
+    });
+  };
+  const removeCDoc = (id: string) => setCDocs((p) => p.filter((x) => x.id !== id));
+
+
   const handleSubmitComment = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
     if (!profile?.id || !postId || !newComment.trim()) {
-      toast({
-        title: 'Sign in required',
-        description: 'Please sign in to comment.',
-        variant: 'destructive',
-      });
+      toast({ title: 'Sign in required', description: 'Please sign in to comment.', variant: 'destructive' });
       return;
     }
     setSubmittingComment(true);
+    setCUploadProgress(0);
+
     try {
       const payload: CommentRequestDto = {
         postId,
@@ -333,10 +413,50 @@ export default function PostDetailPage() {
       };
       const created = await commentAPI.create(payload);
 
-      // map đúng UIComment thay vì object tự chế
-      const ui = mapCommentToUI(created, { postId, parentCommentId: null, depth: 0 });
-      setComments((prev) => [...prev, ui]);
+      // Upload attachments (theo từng file) -> { commentId }
+      const totalFiles = cImages.length + cDocs.length;
+      if (totalFiles > 0) {
+        let done = 0;
+        const tick = () => {
+          done += 1;
+          setCUploadProgress(Math.round((done / totalFiles) * 100));
+        };
 
+        await Promise.all(
+          cImages.map(async (img) => {
+            try {
+              await materialAPI.uploadImage(img.file, {
+                commentId: created.id,
+                title: img.file.name,
+                description: 'image',
+              });
+            } finally {
+              tick();
+            }
+          })
+        );
+
+        await Promise.all(
+          cDocs.map(async (d) => {
+            try {
+              await materialAPI.uploadDocuments([d.file], {
+                commentId: created.id,
+                title: d.file.name,
+                description: 'document',
+              });
+            } finally {
+              tick();
+            }
+          })
+        );
+      }
+
+      // reload tree để thấy material
+      await loadComments();
+
+      // reset form
+      cImages.forEach((i) => URL.revokeObjectURL(i.preview));
+      setCImages([]); setCDocs([]); setCUploadProgress(0);
       setNewComment('');
       toast({ title: 'Success', description: 'Comment posted successfully' });
     } catch (e) {
@@ -347,27 +467,31 @@ export default function PostDetailPage() {
     }
   };
 
-  const handleSubmitReply = async (parentId: string, content: string) => {
+  const handleSubmitReply = async (parentId: string, content: string, images: File[] = [], docs: File[] = []) => {
     if (!profile?.id || !postId) {
-      toast({
-        title: 'Sign in required',
-        description: 'Please sign in to reply.',
-        variant: 'destructive',
-      });
+      toast({ title: 'Sign in required', description: 'Please sign in to reply.', variant: 'destructive' });
       return;
     }
     const text = content.trim();
     if (!text) return;
 
     try {
-      const payload: CommentRequestDto = {
-        postId,
-        content: text,
-        parentCommentId: parentId,
-      };
-
+      const payload: CommentRequestDto = { postId, content: text, parentCommentId: parentId };
       const created = await commentAPI.create(payload);
+
+      // upload files -> { commentId: created.id }
+      const imgJobs = images.map((f) =>
+        materialAPI.uploadImage(f, { commentId: created.id, title: f.name, description: 'image' })
+      );
+      const docJobs = docs.map((f) =>
+        materialAPI.uploadDocuments([f], { commentId: created.id, title: f.name, description: 'document' })
+      );
+      await Promise.allSettled([...imgJobs, ...docJobs]);
+
+      // chèn reply và/hoặc reload
       setComments((prev) => insertReplyIntoTree(prev, parentId, created, 2));
+      // nếu muốn chắc chắn có materials từ BE: await loadComments();
+
       toast({ title: 'Success', description: 'Reply posted successfully' });
     } catch (e) {
       console.error(e);
@@ -519,7 +643,7 @@ export default function PostDetailPage() {
           {(images.length > 0 || documents.length > 0) && (
             <div className="space-y-4">
               <Separator />
-              <h3 className="font-semibold">Attachments</h3>
+              <h3 className="font-semibold">Tập tin đính kèm</h3>
 
               {/* Images */}
               {images.length > 0 && (
@@ -633,6 +757,114 @@ export default function PostDetailPage() {
               disabled={submittingComment}
               rows={3}
             />
+
+            {/* Attachments for NEW comment */}
+            <div className="space-y-3">
+              {/* IMAGES */}
+              <div
+                onDragOver={(e) => e.preventDefault()}
+                onDrop={(e) => { e.preventDefault(); onPickCImages(e.dataTransfer.files); }}
+                className="rounded-2xl border-2 border-dashed p-4 hover:bg-muted/40 transition cursor-pointer"
+                onClick={() => document.getElementById('c-image-input')?.click()}
+              >
+                <div className="flex items-center gap-3">
+                  <div className="p-2 rounded-full border">
+                    <ImagePlus className="h-4 w-4" />
+                  </div>
+                  <div className="flex-1">
+                    <div className="text-sm font-medium">Add images</div>
+                    <div className="text-xs text-muted-foreground">JPG, PNG, WEBP</div>
+                  </div>
+                  <Button type="button" variant="secondary" disabled={submittingComment}>
+                    <UploadCloud className="h-4 w-4 mr-2" />
+                    Browse
+                  </Button>
+                </div>
+                <input
+                  id="c-image-input"
+                  type="file"
+                  accept="image/jpeg,image/png,image/webp"
+                  multiple
+                  className="hidden"
+                  onChange={(e) => onPickCImages(e.target.files)}
+                />
+                {cImages.length > 0 && (
+                  <ScrollArea className="mt-3 h-24">
+                    <div className="flex gap-2">
+                      {cImages.map((img) => (
+                        <div key={img.id} className="relative w-20 h-20 rounded-lg overflow-hidden border">
+                          <img src={img.preview} alt={img.file.name} className="object-cover w-full h-full" />
+                          <button
+                            type="button"
+                            className="absolute top-1 right-1 bg-background/90 rounded-full p-1 border"
+                            onClick={(e) => { e.stopPropagation(); removeCImage(img.id); }}
+                            aria-label="Remove image"
+                          >
+                            <X className="h-3 w-3" />
+                          </button>
+                        </div>
+                      ))}
+                    </div>
+                  </ScrollArea>
+                )}
+              </div>
+
+              {/* DOCS */}
+              <div
+                onDragOver={(e) => e.preventDefault()}
+                onDrop={(e) => { e.preventDefault(); onPickCDocs(e.dataTransfer.files); }}
+                className="rounded-2xl border-2 border-dashed p-4 hover:bg-muted/40 transition cursor-pointer"
+                onClick={() => document.getElementById('c-doc-input')?.click()}
+              >
+                <div className="flex items-center gap-3">
+                  <div className="p-2 rounded-full border">
+                    <FilePlus2 className="h-4 w-4" />
+                  </div>
+                  <div className="flex-1">
+                    <div className="text-sm font-medium">Add documents</div>
+                    <div className="text-xs text-muted-foreground">PDF, DOCX, XLSX, PPTX, ZIP, RAR</div>
+                  </div>
+                  <Button type="button" variant="secondary" disabled={submittingComment}>
+                    <UploadCloud className="h-4 w-4 mr-2" />
+                    Browse
+                  </Button>
+                </div>
+                <input
+                  id="c-doc-input"
+                  type="file"
+                  accept=".pdf,.docx,.xlsx,.pptx,.zip,.rar,application/pdf,application/vnd.openxmlformats-officedocument.wordprocessingml.document,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,application/vnd.openxmlformats-officedocument.presentationml.presentation,application/zip,application/vnd.rar,application/x-rar-compressed"
+                  multiple
+                  className="hidden"
+                  onChange={(e) => onPickCDocs(e.target.files)}
+                />
+                {cDocs.length > 0 && (
+                  <div className="mt-3 space-y-2">
+                    {cDocs.map((d) => (
+                      <div key={d.id} className="flex items-center justify-between rounded-md border p-2">
+                        <div className="flex items-center gap-2">
+                          <FileText className="h-4 w-4" />
+                          <span className="text-xs truncate max-w-[220px]">{d.file.name}</span>
+                        </div>
+                        <Button type="button" variant="ghost" size="icon" onClick={() => removeCDoc(d.id)}>
+                          <X className="h-4 w-4" />
+                        </Button>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+
+              {submittingComment && (cImages.length + cDocs.length) > 0 && (
+                <div className="space-y-1">
+                  <div className="flex items-center justify-between">
+                    <span className="text-xs text-muted-foreground">Uploading attachments…</span>
+                    <span className="text-xs">{cUploadProgress}%</span>
+                  </div>
+                  <Progress value={cUploadProgress} />
+                </div>
+              )}
+            </div>
+
             <div className="flex justify-end">
               <Button type="submit" disabled={submittingComment || !newComment.trim()}>
                 <Send className="mr-2 h-4 w-4" />
@@ -653,7 +885,8 @@ export default function PostDetailPage() {
                   comment={c}
                   onLike={(id) => handleCommentReact(id, 'like')}
                   onDislike={(id) => handleCommentReact(id, 'dislike')}
-                  onSubmitReply={(parentId, content) => handleSubmitReply(parentId, content)}
+                  onSubmitReply={(parentId, content, imgs, docs) => handleSubmitReply(parentId, content, imgs, docs)}
+                  onPreview={openPreview}
                 />
               ))}
             </div>

@@ -172,14 +172,29 @@ export default function CreatePostPage() {
 
         if (docs.length > 0) {
           try {
-            await materialAPI.uploadDocuments(
-              docs.map((d) => d.file),
-              { postId, title: 'attachments', description: 'documents' }
+            // upload từng file để title = tên file
+            await Promise.all(
+              docs.map(async (d) => {
+                try {
+                  await materialAPI.uploadDocuments(
+                    [d.file],                                 
+                    { postId, title: d.file.name, description: 'document' }
+                  );
+                } catch (err) {
+                  console.error('upload document failed', d.file.name, err);
+                  toast({
+                    title: 'Document upload failed',
+                    description: d.file.name,
+                    variant: 'destructive',
+                  });
+                } finally {
+                  tick(); // cập nhật progress cho mỗi file
+                }
+              })
             );
-            for (let i = 0; i < docs.length; i++) tick();
           } catch (e) {
+            // phòng hờ Promise.all lỗi tổng
             console.error('upload documents failed', e);
-            for (let i = 0; i < docs.length; i++) tick();
             toast({
               title: 'Document upload failed',
               description: 'Some files could not be uploaded.',
@@ -239,7 +254,7 @@ export default function CreatePostPage() {
               </p>
             </div>
 
-           
+
             <div className="space-y-2">
               <Label htmlFor="content">Content *</Label>
               <Textarea
