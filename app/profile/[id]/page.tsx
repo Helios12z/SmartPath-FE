@@ -22,12 +22,13 @@ import {
   DialogTitle,
   DialogTrigger,
 } from '@/components/ui/dialog';
-import { Award, BookOpen, MessageSquare, Users, Mail } from 'lucide-react';
+import { Award, BookOpen, MessageSquare, Users, Mail, UserPlus, X, Check } from 'lucide-react';
 import { PostCard } from '@/components/forum/PostCard';
-import type { UserProfile, BadgeAward } from '@/lib/types';
+import type { UserProfile, BadgeAward, FriendshipResponseDto } from '@/lib/types';
 import { useToast } from '@/hooks/use-toast';
 import { UserBadge } from '@/components/badges/UserBadge';
 import { userAPI } from '@/lib/api/userAPI';
+import { friendshipAPI } from '@/lib/api/friendshipAPI';
 import AvatarCropDialog from '@/components/profile/AvatarCropDialog';
 
 type ProfileStats = {
@@ -35,6 +36,9 @@ type ProfileStats = {
   commentsCount: number;
   likesReceived: number;
 };
+
+// ===== NEW: trạng thái quan hệ
+type RelationState = 'none' | 'accepted' | 'outgoing' | 'incoming';
 
 export default function ProfilePage() {
   const params = useParams();
@@ -67,6 +71,11 @@ export default function ProfilePage() {
   });
 
   const isOwnProfile = currentUser?.id === profileId;
+
+  // ===== NEW: relation state
+  const [relation, setRelation] = useState<RelationState>('none');
+  const [friendshipId, setFriendshipId] = useState<string | null>(null);
+  const [working, setWorking] = useState(false);
 
   const loadProfile = useCallback(async () => {
     if (!profileId) return;
@@ -104,10 +113,64 @@ export default function ProfilePage() {
     }
   }, [profileId, toast]);
 
+  // ===== NEW: load quan hệ giữa currentUser và profileId
+  const loadRelation = useCallback(async () => {
+    if (!currentUser?.id || !profileId || currentUser.id === profileId) {
+      setRelation('none');
+      setFriendshipId(null);
+      return;
+    }
+    try {
+      const items: FriendshipResponseDto[] = await friendshipAPI.getMineRaw();
+
+      // tìm record có 2 đầu là currentUser.id và profileId
+      const r = items.find((x: any) => {
+        const followerId = x?.followerId ?? x?.FollowerId;
+        const followedId = x?.followedUserId ?? x?.FollowedUserId;
+        return (
+          (followerId === currentUser.id && followedId === profileId) ||
+          (followerId === profileId && followedId === currentUser.id)
+        );
+      });
+
+      if (!r) {
+        setRelation('none');
+        setFriendshipId(null);
+        return;
+      }
+
+      const status = (r as any)?.status ?? (r as any)?.Status; // 'Pending' | 'Accepted' (hoặc 0/1)
+      const followerId = (r as any)?.followerId ?? (r as any)?.FollowerId;
+
+      if (status === 'Accepted' || status === 1) {
+        setRelation('accepted');
+        setFriendshipId((r as any)?.id ?? (r as any)?.Id ?? null);
+      } else if (status === 'Pending' || status === 0) {
+        // nếu mình là follower => outgoing; ngược lại incoming
+        if (followerId === currentUser.id) {
+          setRelation('outgoing');
+        } else {
+          setRelation('incoming');
+        }
+        setFriendshipId((r as any)?.id ?? (r as any)?.Id ?? null);
+      } else {
+        setRelation('none');
+        setFriendshipId(null);
+      }
+    } catch {
+      setRelation('none');
+      setFriendshipId(null);
+    }
+  }, [currentUser?.id, profileId]);
+
   useEffect(() => {
     if (!profileId) return;
     loadProfile();
   }, [profileId, loadProfile]);
+
+  useEffect(() => {
+    loadRelation();
+  }, [loadRelation]);
 
   useEffect(() => {
     if (!isEditOpen || !profileData) return;
@@ -204,14 +267,14 @@ export default function ProfilePage() {
         }
 
         const payload = {
-          email,          
-          username,       
-          avatarUrl: fileUrl, 
+          email,
+          username,
+          avatarUrl: fileUrl,
         };
 
         const updated = await userAPI.update(profileId, payload);
         setProfileData(updated);
-        setProfileData((p) => p ? ({ ...p, avatarUrl: `${fileUrl}?v=${Date.now()}` }) : p);
+        setProfileData((p) => (p ? { ...p, avatarUrl: `${fileUrl}?v=${Date.now()}` } : p));
 
         toast({ title: 'Ảnh đại diện đã được cập nhật' });
         setAvatarDialogOpen(false);
@@ -227,6 +290,66 @@ export default function ProfilePage() {
     [profileId, profileData, toast]
   );
 
+  // ===== NEW: actions follow/unfollow/accept/reject
+  const doFollow = async () => {
+    if (!currentUser?.id || !profileId || working) return;
+    setWorking(true);
+    try {
+      await friendshipAPI.follow({ followedUserId: profileId });
+      setRelation('outgoing');
+      toast({ title: 'Success', description: 'Follow request sent' });
+      await loadRelation();
+    } catch (e: any) {
+      toast({ title: 'Error', description: e?.message ?? 'Failed to follow', variant: 'destructive' });
+    } finally {
+      setWorking(false);
+    }
+  };
+
+  const doUnfollowOrCancel = async () => {
+    if (!currentUser?.id || !profileId || working) return;
+    setWorking(true);
+    try {
+      await friendshipAPI.cancelFollow(profileId);
+      setRelation('none');
+      toast({ title: 'Success', description: relation === 'accepted' ? 'Unfollowed' : 'Request canceled' });
+      await loadRelation();
+    } catch (e: any) {
+      toast({ title: 'Error', description: e?.message ?? 'Failed to update follow', variant: 'destructive' });
+    } finally {
+      setWorking(false);
+    }
+  };
+
+  const doAccept = async () => {
+    if (!friendshipId || working) return;
+    setWorking(true);
+    try {
+      await friendshipAPI.accept(friendshipId);
+      setRelation('accepted');
+      toast({ title: 'Accepted', description: 'You are now connected' });
+      await loadRelation();
+    } catch (e: any) {
+      toast({ title: 'Error', description: e?.message ?? 'Failed to accept', variant: 'destructive' });
+    } finally {
+      setWorking(false);
+    }
+  };
+
+  const doReject = async () => {
+    if (!friendshipId || working) return;
+    setWorking(true);
+    try {
+      await friendshipAPI.reject(friendshipId);
+      setRelation('none');
+      toast({ title: 'Rejected', description: 'Request removed' });
+      await loadRelation();
+    } catch (e: any) {
+      toast({ title: 'Error', description: e?.message ?? 'Failed to reject', variant: 'destructive' });
+    } finally {
+      setWorking(false);
+    }
+  };
 
   const content = useMemo(() => {
     if (loading) {
@@ -298,7 +421,7 @@ export default function ProfilePage() {
                   <p className="text-sm text-muted-foreground">{profileData.bio}</p>
                 )}
 
-                {/* Hàng nút hành động rõ ràng hơn */}
+                {/* ===== NEW: Hàng nút hành động theo quan hệ */}
                 <div className="flex flex-wrap gap-2">
                   {isOwnProfile ? (
                     <>
@@ -319,18 +442,13 @@ export default function ProfilePage() {
                           </DialogHeader>
 
                           <form id="edit-profile-form" className="space-y-4" onSubmit={handleEditSubmit}>
-                            {/* Email (read-only để gửi kèm cho BE) */}
+                            {/* Email */}
                             <div className="space-y-2">
                               <Label htmlFor="email">Email</Label>
-                              <Input
-                                id="email"
-                                value={formState.email}
-                                disabled
-                                readOnly
-                              />
+                              <Input id="email" value={formState.email} disabled readOnly />
                             </div>
 
-                            {/* Username (có thể cho sửa hoặc không tuỳ chính sách) */}
+                            {/* Username */}
                             <div className="space-y-2">
                               <Label htmlFor="username">Username</Label>
                               <Input
@@ -374,7 +492,6 @@ export default function ProfilePage() {
                               />
                             </div>
 
-                            {/* Major (BE) – bạn đang gọi là field_of_study trên FE */}
                             <div className="space-y-2">
                               <Label htmlFor="field_of_study">Major</Label>
                               <Input
@@ -386,7 +503,6 @@ export default function ProfilePage() {
                               />
                             </div>
 
-                            {/* Faculty (NEW) */}
                             <div className="space-y-2">
                               <Label htmlFor="faculty">Faculty</Label>
                               <Input
@@ -398,7 +514,6 @@ export default function ProfilePage() {
                               />
                             </div>
 
-                            {/* Year of Study (NEW) */}
                             <div className="space-y-2">
                               <Label htmlFor="year_of_study">Year of Study</Label>
                               <Input
@@ -439,14 +554,45 @@ export default function ProfilePage() {
                     </>
                   ) : (
                     <>
-                      <Button size="sm">
-                        <Users className="mr-2 h-4 w-4" />
-                        Add Friend
-                      </Button>
-                      <Button size="sm" variant="outline">
-                        <Mail className="mr-2 h-4 w-4" />
-                        Message
-                      </Button>
+                      {relation === 'accepted' && (
+                        <>
+                          <Button size="sm" variant="ghost" onClick={doUnfollowOrCancel} disabled={working}>
+                            <X className="mr-2 h-4 w-4" />
+                            Unfollow
+                          </Button>
+                          <Button size="sm" variant="outline">
+                            <Mail className="mr-2 h-4 w-4" />
+                            Message
+                          </Button>
+                        </>
+                      )}
+
+                      {relation === 'outgoing' && (
+                        <Button size="sm" variant="ghost" onClick={doUnfollowOrCancel} disabled={working}>
+                          <X className="mr-2 h-4 w-4" />
+                          Cancel request
+                        </Button>
+                      )}
+
+                      {relation === 'incoming' && (
+                        <>
+                          <Button size="sm" onClick={doAccept} disabled={working}>
+                            <Check className="mr-2 h-4 w-4" />
+                            Accept
+                          </Button>
+                          <Button size="sm" variant="ghost" onClick={doReject} disabled={working}>
+                            <X className="mr-2 h-4 w-4" />
+                            Reject
+                          </Button>
+                        </>
+                      )}
+
+                      {relation === 'none' && (
+                        <Button size="sm" onClick={doFollow} disabled={working}>
+                          <UserPlus className="mr-2 h-4 w-4" />
+                          Follow
+                        </Button>
+                      )}
                     </>
                   )}
                 </div>
@@ -494,7 +640,7 @@ export default function ProfilePage() {
             <TabsTrigger value="activity">Activity</TabsTrigger>
           </TabsList>
 
-          <TabsContent value="posts" className="space-y-4 mt-6">
+        <TabsContent value="posts" className="space-y-4 mt-6">
             {posts.length === 0 ? (
               <Card className="p-12 text-center">
                 <p className="text-muted-foreground">
@@ -520,7 +666,20 @@ export default function ProfilePage() {
         </Tabs>
       </div>
     );
-  }, [loading, profileData, stats, posts, isOwnProfile, isEditOpen, formState, saving, handleEditSubmit, primaryBadge]);
+  }, [
+    loading,
+    profileData,
+    stats,
+    posts,
+    isOwnProfile,
+    isEditOpen,
+    formState,
+    saving,
+    handleEditSubmit,
+    primaryBadge,
+    relation,
+    working,
+  ]);
 
   return (
     <div className="min-h-screen bg-slate-50 dark:bg-slate-950">
