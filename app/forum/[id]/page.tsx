@@ -486,8 +486,14 @@ export default function PostDetailPage() {
     const text = content.trim();
     if (!text) return;
 
+    const target = findComment(comments, parentId);
+    let effectiveParentId = parentId;
+    if (target && (target.depth ?? 0) >= 2 && target.parent_comment_id) {
+      effectiveParentId = target.parent_comment_id;
+    }
+
     try {
-      const payload: CommentRequestDto = { postId, content: text, parentCommentId: parentId };
+      const payload: CommentRequestDto = { postId, content: text, parentCommentId: effectiveParentId };
       const created = await commentAPI.create(payload);
 
       // upload files -> { commentId: created.id }
@@ -499,9 +505,7 @@ export default function PostDetailPage() {
       );
       await Promise.allSettled([...imgJobs, ...docJobs]);
 
-      // chèn reply và/hoặc reload
-      setComments((prev) => insertReplyIntoTree(prev, parentId, created, 2));
-      // nếu muốn chắc chắn có materials từ BE: await loadComments();
+      setComments((prev) => insertReplyIntoTree(prev, effectiveParentId, created, 2));
 
       toast({ title: 'Success', description: 'Reply posted successfully' });
     } catch (e) {
@@ -768,7 +772,7 @@ export default function PostDetailPage() {
                 onChange={(e) => setNewComment(e.target.value)}
                 disabled={submittingComment}
                 rows={3}
-                className="pr-20" 
+                className="pr-20"
               />
 
               <input

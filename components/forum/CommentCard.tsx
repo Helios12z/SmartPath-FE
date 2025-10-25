@@ -192,7 +192,7 @@ export function CommentCard({
                   <span>{comment.negativeReactionCount}</span>
                 </button>
 
-                {canReply && comment.depth < 2 && (
+                {canReply && comment.depth <= 2 && (
                   <button
                     type="button"
                     onClick={() => setReplyOpen((s) => !s)}
@@ -203,7 +203,7 @@ export function CommentCard({
                 )}
               </div>
 
-              {canReply && comment.depth < 2 && replyOpen && onSubmitReply && (
+              {canReply && comment.depth <= 2 && replyOpen && onSubmitReply && (
                 <div className="mt-3 space-y-3">
                   {/* Textarea + 2 icon góc phải-dưới */}
                   <div className="relative">
