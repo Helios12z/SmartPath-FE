@@ -49,7 +49,6 @@ export function Navbar() {
   const navLinks = [
     { href: '/forum', label: 'Forum' },
     { href: '/materials', label: 'Materials' },
-    { href: '/groups', label: 'Groups' },
     { href: '/friends', label: 'Friends' },
   ];
 

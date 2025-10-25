@@ -26,7 +26,6 @@ export function Sidebar() {
   const mainLinks = [
     { href: '/forum', icon: Home, label: 'Home' },
     { href: '/materials', icon: BookOpen, label: 'Materials' },
-    { href: '/groups', icon: Users, label: 'Study Groups' },
   ];
 
   const socialLinks = [
