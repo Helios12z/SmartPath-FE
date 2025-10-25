@@ -66,12 +66,27 @@ export function Navbar() {
     try {
       if (!n.isRead) await markRead(n.id);
 
+      if (typeof n?.url === 'string' && n.url.trim().length > 0) {
+        const raw = n.url.trim();
+
+        // Nếu là follow request → mở tab Requests
+        if (n?.type === 'friend.request' || raw.startsWith('/friends')) {
+          router.push('/friends?tab=requests');
+          return;
+        }
+
+        router.push(raw);
+        return;
+      }
+
+      // 2) Forum fallback (post/comment)
       const url = buildForumUrlFromNotification(n);
       if (url) {
         router.push(url);
         return;
       }
 
+      // 3) Cuối cùng
       router.push('/forum');
     } catch (e) {
       console.error(e);
