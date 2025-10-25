@@ -95,7 +95,9 @@ export function CommentCard({
   };
 
   return (
-    <div className="space-y-2">
+    <div id={`comment-${comment.id}`}
+      data-comment-id={comment.id}
+      className="space-y-2 scroll-mt-24">
       <div className="flex gap-3">
         <Avatar className="h-8 w-8">
           <AvatarImage src={comment.author.avatar_url ?? undefined} />

@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useEffect, useCallback, useMemo } from 'react';
-import { useParams, useRouter } from 'next/navigation';
+import { useParams, useRouter, useSearchParams } from 'next/navigation';
 import Link from 'next/link';
 import { formatDistanceToNow } from 'date-fns';
 
@@ -111,7 +111,8 @@ export default function PostDetailPage() {
   const [cDocs, setCDocs] = useState<QueuedDoc[]>([]);
   const [cUploadProgress, setCUploadProgress] = useState(0);
 
-  // reply states gộp vào CommentCard (local), không cần ở page nữa
+  const searchParams = useSearchParams();
+  const targetCommentId = searchParams.get('c') || null;
 
   // materials
   const [materials, setMaterials] = useState<MaterialResponse[]>([]);
@@ -198,6 +199,20 @@ export default function PostDetailPage() {
       // 4) Gắn materials vào tree
       tree = attachMaterialsToTree(tree, byId);
 
+      const getCreatedTs = (n: any) => {
+        const v = n.created_at ?? n.createdAt;
+        return v ? new Date(v).getTime() : 0;
+      };
+      (function sortChildrenAsc(nodes: UIComment[]) {
+        for (const n of nodes) {
+          if (n.children?.length) {
+            n.children.sort((a, b) => getCreatedTs(a) - getCreatedTs(b));
+            sortChildrenAsc(n.children);
+          }
+        }
+      })(tree);
+
+
       setComments(tree);
     } catch (e) {
       console.error('Failed to load comments', e);
@@ -221,6 +236,19 @@ export default function PostDetailPage() {
     loadComments();
     loadOwnerInformation();
   }, [loadPost, loadMaterials, loadComments, loadOwnerInformation]);
+
+  useEffect(() => {
+    if (!targetCommentId) return;
+    const t = setTimeout(() => {
+      const el = document.getElementById(`comment-${targetCommentId}`);
+      if (el) {
+        el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+        el.classList.add('ring-2', 'ring-blue-400', 'rounded-md');
+        setTimeout(() => el.classList.remove('ring-2', 'ring-blue-400', 'rounded-md'), 1600);
+      }
+    }, 200);
+    return () => clearTimeout(t);
+  }, [targetCommentId, comments]);
 
   type ReactionKind = 'like' | 'dislike';
 
@@ -895,14 +923,17 @@ export default function PostDetailPage() {
           ) : (
             <div className="space-y-4">
               {comments.map((c) => (
-                <CommentCard
-                  key={c.id}
-                  comment={c}
-                  onLike={(id) => handleCommentReact(id, 'like')}
-                  onDislike={(id) => handleCommentReact(id, 'dislike')}
-                  onSubmitReply={(parentId, content, imgs, docs) => handleSubmitReply(parentId, content, imgs, docs)}
-                  onPreview={openPreview}
-                />
+                <div key={c.id} id={`comment-${c.id}`}>
+                  <CommentCard
+                    comment={c}
+                    onLike={(id) => handleCommentReact(id, 'like')}
+                    onDislike={(id) => handleCommentReact(id, 'dislike')}
+                    onSubmitReply={(parentId, content, imgs, docs) =>
+                      handleSubmitReply(parentId, content, imgs, docs)
+                    }
+                    onPreview={openPreview}
+                  />
+                </div>
               ))}
             </div>
           )}
