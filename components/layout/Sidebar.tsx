@@ -31,7 +31,7 @@ export function Sidebar() {
   const socialLinks = [
     { href: '/friends', icon: UserPlus, label: 'Friends' },
     { href: '/messages', icon: MessageSquare, label: 'Messages' },
-    { href: '/events', icon: Calendar, label: 'Events' },
+    { href: '/chatbot', icon: Calendar, label: 'Chatbot' },
   ];
 
   const bottomLinks = [

@@ -7,20 +7,21 @@ import type {
   BotMessageResponse,
   PageResult,
   RenameConversationRequest,
+  BotGenerateResponse
 } from '@/lib/types';
+import { BotMessageRole } from '@/lib/types';
 
 export const botAPI = {
-  // Conversations
   createConversation: async (
     payload: BotConversationCreateRequest
   ): Promise<BotConversationResponse> =>
-    fetchWrapper.post('/bot/conversations', payload),
+    fetchWrapper.post<BotConversationResponse>('/bot/conversations', payload),
 
   mineConversations: async (
     page = 1,
     pageSize = 20
   ): Promise<PageResult<BotConversationResponse>> =>
-    fetchWrapper.get(`/bot/conversations?page=${page}&pageSize=${pageSize}`),
+    fetchWrapper.get<PageResult<BotConversationResponse>>(`/bot/conversations?page=${page}&pageSize=${pageSize}`),
 
   getConversationWithMessages: async (
     conversationId: string,
@@ -30,21 +31,20 @@ export const botAPI = {
     const qs = new URLSearchParams();
     qs.set('limit', String(limit));
     if (beforeMessageId) qs.set('beforeMessageId', beforeMessageId);
-    return fetchWrapper.get(`/bot/conversations/${conversationId}?${qs.toString()}`);
+    return fetchWrapper.get<BotConversationWithMessagesResponse>(`/bot/conversations/${conversationId}?${qs.toString()}`);
   },
 
   renameConversation: async (
     conversationId: string,
     payload: RenameConversationRequest
   ): Promise<void> =>
-    fetchWrapper.patch(`/bot/conversations/${conversationId}/title`, payload),
+    fetchWrapper.patch<void>(`/bot/conversations/${conversationId}/title`, payload),
 
   deleteConversation: async (conversationId: string): Promise<void> =>
-    fetchWrapper.del(`/bot/conversations/${conversationId}`),
+    fetchWrapper.del<void>(`/bot/conversations/${conversationId}`),
 
-  // Messages
   appendMessage: async (payload: BotMessageRequest): Promise<BotMessageResponse> =>
-    fetchWrapper.post('/bot/messages', payload),
+    fetchWrapper.post<BotMessageResponse>('/bot/messages', payload),
 
   listMessages: async (
     conversationId: string,
@@ -54,11 +54,11 @@ export const botAPI = {
     const qs = new URLSearchParams();
     qs.set('limit', String(limit));
     if (beforeMessageId) qs.set('beforeMessageId', beforeMessageId);
-    return fetchWrapper.get(`/bot/conversations/${conversationId}/messages?${qs.toString()}`);
+    return fetchWrapper.get<BotMessageResponse[]>(`/bot/conversations/${conversationId}/messages?${qs.toString()}`);
   },
 
   deleteMessage: async (messageId: string): Promise<void> =>
-    fetchWrapper.del(`/bot/messages/${messageId}`),
+    fetchWrapper.del<void>(`/bot/messages/${messageId}`),
 
   appendUserThenAssistant: async (
     conversationId: string,
@@ -67,22 +67,31 @@ export const botAPI = {
     tokenStats?: { promptTokens?: number; completionTokens?: number; totalTokens?: number; latencyMs?: number },
     toolCallsJson?: string
   ): Promise<{ user: BotMessageResponse; assistant: BotMessageResponse }> => {
-    const user = await fetchWrapper.post('/bot/messages', {
+    const user = await fetchWrapper.post<BotMessageResponse>('/bot/messages', {
       conversationId,
       content: userContent,
-      role: 1, // BotMessageRole.User
+      role: BotMessageRole.User,
       ...tokenStats,
       toolCallsJson,
     } as BotMessageRequest);
 
-    const assistant = await fetchWrapper.post('/bot/messages', {
+    const assistant = await fetchWrapper.post<BotMessageResponse>('/bot/messages', {
       conversationId,
       content: assistantContent,
-      role: 2, // BotMessageRole.Assistant
+      role: BotMessageRole.Assistant,
       ...tokenStats,
       toolCallsJson,
     } as BotMessageRequest);
 
     return { user, assistant };
   },
+
+  generate: async (payload: {
+    conversationId: string;
+    userContent: string;
+    systemPrompt?: string | null;
+    contextLimit?: number;
+    model?: string;
+  }): Promise<BotGenerateResponse> =>
+    fetchWrapper.post<BotGenerateResponse>('/bot/generate', payload),
 };

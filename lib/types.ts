@@ -328,3 +328,8 @@ export type PageResult<T> = {
   pageSize: number;
   items: T[];
 };
+
+export interface BotGenerateResponse {
+  userMessage: BotMessageResponse;
+  assistantMessage: BotMessageResponse;
+}
