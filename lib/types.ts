@@ -122,6 +122,7 @@ export interface ChatOtherUser {
 
 export interface Message {
   id: string;
+  chatId: string;
   content: string;
   senderId: string;
   senderUsername: string;

@@ -1,6 +1,8 @@
+// src/app/messages/[...chatId]/page.tsx (chỉ phần khác biệt, bạn có thể paste đè)
+
 'use client';
 
-import { useEffect, useState, useCallback, useMemo } from 'react';
+import { useEffect, useState, useCallback, useMemo, useRef } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import { Navbar } from '@/components/layout/Navbar';
 import { Sidebar } from '@/components/layout/Sidebar';
@@ -12,15 +14,16 @@ import { ScrollArea } from '@/components/ui/scroll-area';
 import { Send } from 'lucide-react';
 import { formatDistanceToNow } from 'date-fns';
 import { chatAPI } from '@/lib/api/chatAPI';
+import { messageAPI } from '@/lib/api/messageAPI';
 import type { Chat, Message } from '@/lib/types';
 import { useAuth } from '@/context/AuthContext';
+import { useChatHub } from '@/hooks/use-chat';
 
 export default function MessagesPage() {
   const params = useParams<{ chatId?: string[] }>();
   const router = useRouter();
   const { profile: currentUser } = useAuth();
 
-  // Lấy chatId từ URL (nếu có)
   const chatIdFromUrl = Array.isArray(params.chatId) ? params.chatId[0] : undefined;
 
   const [chats, setChats] = useState<Chat[]>([]);
@@ -28,20 +31,57 @@ export default function MessagesPage() {
   const [selectedChat, setSelectedChat] = useState<Chat | null>(null);
   const [messageInput, setMessageInput] = useState('');
   const [loading, setLoading] = useState(true);
+  const lastJoinedRef = useRef<string | null>(null);
 
-  // Tải danh sách chat của mình
+  const { connected, join, leave } = useChatHub({
+    selectedChatId,
+    onNewMessage: (raw) => {
+      const m = {
+        id: raw.id ?? raw.Id,
+        chatId: raw.chatId ?? raw.ChatId,
+        content: raw.content ?? raw.Content,
+        senderId: raw.senderId ?? raw.SenderId,
+        senderUsername: raw.senderUsername ?? raw.SenderUsername,
+        isRead: raw.isRead ?? raw.IsRead,
+        createdAt: raw.createdAt ?? raw.CreatedAt,
+      };
+
+      setSelectedChat(prev => {
+        if (!prev || prev.id !== m.chatId) return prev;
+        if (prev.messages?.some(x => x.id === m.id)) return prev;
+        const appended: Message = m;
+        return { ...prev, messages: [...(prev.messages ?? []), appended] } as Chat;
+      });
+
+      if (selectedChatId === m.chatId && m.senderId !== currentUser?.id) {
+        messageAPI.markRead(m.id).catch(() => { });
+      }
+    },
+    onMessageRead: (raw) => {
+      const e = {
+        messageId: raw.messageId ?? raw.MessageId,
+        chatId: raw.chatId ?? raw.ChatId,
+        readerId: raw.readerId ?? raw.ReaderId,
+      };
+
+      setSelectedChat(prev => {
+        if (!prev || prev.id !== e.chatId) return prev;
+        const msgs = (prev.messages ?? []).map(x => x.id === e.messageId ? { ...x, isRead: true } : x);
+        return { ...prev, messages: msgs } as Chat;
+      });
+    }
+  });
+
+  // load chats
   useEffect(() => {
     (async () => {
       try {
         const mine = await chatAPI.getMine();
         setChats(mine);
-
-        // Nếu URL không có chatId, tự điều hướng sang chat đầu tiên (nếu có)
         if (!chatIdFromUrl && mine.length > 0) {
           setSelectedChatId(mine[0].id);
           router.replace(`/messages/${mine[0].id}`);
         } else {
-          // Nếu URL có chatId, đồng bộ state chọn
           setSelectedChatId(chatIdFromUrl);
         }
       } catch (e) {
@@ -52,53 +92,71 @@ export default function MessagesPage() {
     })();
   }, [chatIdFromUrl, router]);
 
-  // Tải chi tiết chat khi selectedChatId thay đổi
+  // load chat detail & join group
   useEffect(() => {
-    if (!selectedChatId) {
-      setSelectedChat(null);
-      return;
-    }
+    if (!selectedChatId) { setSelectedChat(null); return; }
     (async () => {
       try {
         const chat = await chatAPI.getById(selectedChatId);
         setSelectedChat(chat);
+
+        if (connected) {
+          if (lastJoinedRef.current && lastJoinedRef.current !== selectedChatId) {
+            await leave(lastJoinedRef.current).catch(() => { });
+          }
+          await join(selectedChatId);
+          lastJoinedRef.current = selectedChatId;
+        }
       } catch (e) {
         console.error(e);
         setSelectedChat(null);
       }
     })();
-  }, [selectedChatId]);
+  }, [selectedChatId, connected, join, leave]);
 
   const handleSelectChat = useCallback((id: string) => {
     setSelectedChatId(id);
     router.push(`/messages/${id}`);
   }, [router]);
 
-  const handleSendMessage = () => {
+  const handleSendMessage = async () => {
     if (!messageInput.trim() || !selectedChatId) return;
+    try {
+      const saved = await messageAPI.send({ chat_id: selectedChatId, content: messageInput.trim() });
+      setMessageInput('');
 
-    // Tạm mock append local (chưa realtime / API send)
-    const newMsg: Message = {
-      id: crypto.randomUUID(),
-      content: messageInput.trim(),
-      senderId: currentUser?.id ?? 'me',
-      senderUsername: currentUser?.username ?? 'me',
-      isRead: false,
-      createdAt: new Date().toISOString(),
-    } as any;
+      // Normalize vì backend trả PascalCase (Id, ChatId, CreatedAt,...)
+      const m: Message = {
+        id: (saved as any).id ?? (saved as any).Id,
+        chatId: (saved as any).chatId ?? (saved as any).ChatId ?? selectedChatId,
+        content: (saved as any).content ?? (saved as any).Content,
+        senderId: (saved as any).senderId ?? (saved as any).SenderId ?? (currentUser?.id ?? ''),
+        senderUsername: (saved as any).senderUsername ?? (saved as any).SenderUsername ?? (currentUser?.username ?? ''),
+        isRead: (saved as any).isRead ?? (saved as any).IsRead ?? false,
+        createdAt: (saved as any).createdAt ?? (saved as any).CreatedAt ?? new Date().toISOString(),
+      };
 
-    setSelectedChat(prev => {
-      if (!prev) return prev;
-      return { ...prev, messages: [...(prev.messages ?? []), newMsg] } as Chat;
-    });
+      // Append ngay lập tức (authoritative), vẫn chống duplicate
+      setSelectedChat(prev => {
+        if (!prev || prev.id !== m.chatId) return prev;
+        if (prev.messages?.some(x => x.id === m.id)) return prev;
+        return { ...prev, messages: [...(prev.messages ?? []), m] } as Chat;
+      });
 
-    setMessageInput('');
+      // Không cần markRead cho tin mình gửi
+    } catch (e) {
+      console.error(e);
+    }
   };
 
-  const otherMember = useMemo(() => {
-    // (Tuỳ bạn mở rộng ChatResponseDto để có members/otherUser)
-    return null;
-  }, [selectedChat]);
+  // auto mark read khi mở chat (optional)
+  useEffect(() => {
+    if (!selectedChat || !currentUser?.id) return;
+    const unread = (selectedChat.messages ?? []).filter(m => !m.isRead && m.senderId !== currentUser.id);
+    unread.forEach(m => messageAPI.markRead(m.id).catch(() => { }));
+  }, [selectedChat, currentUser?.id]);
+
+  const otherMember = useMemo(() => selectedChat?.otherUser ?? null, [selectedChat]);
 
   return (
     <div className="min-h-screen bg-slate-50 dark:bg-slate-950">
@@ -163,13 +221,13 @@ export default function MessagesPage() {
                   <>
                     <div className="p-4 border-b flex items-center gap-3">
                       <Avatar>
-                        <AvatarImage src={''} alt={'Direct'} />
-                        <AvatarFallback>D</AvatarFallback>
+                        <AvatarImage src={otherMember?.avatarUrl ?? ''} alt={otherMember?.fullName ?? 'Direct'} />
+                        <AvatarFallback>{(otherMember?.fullName?.[0] ?? 'D').toUpperCase()}</AvatarFallback>
                       </Avatar>
                       <div>
-                        <div className="font-medium">{selectedChat.name ?? 'Direct Chat'}</div>
+                        <div className="font-medium">{selectedChat.name ?? otherMember?.fullName ?? 'Direct Chat'}</div>
                         <div className="text-sm text-muted-foreground">
-                          {/* otherMember info nếu có */}
+                          {connected ? 'Online' : 'Connecting...'}
                         </div>
                       </div>
                     </div>
@@ -182,15 +240,16 @@ export default function MessagesPage() {
                             <div key={message.id} className={`flex ${isOwn ? 'justify-end' : 'justify-start'}`}>
                               <div className={`flex gap-2 max-w-[70%] ${isOwn ? 'flex-row-reverse' : ''}`}>
                                 <Avatar className="h-8 w-8">
-                                  <AvatarImage src={''} alt={message.senderUsername} />
+                                  <AvatarImage src={isOwn ? (currentUser?.avatarUrl ?? '') : (otherMember?.avatarUrl ?? '')} alt={message.senderUsername} />
                                   <AvatarFallback>{message.senderUsername?.charAt(0) ?? 'U'}</AvatarFallback>
                                 </Avatar>
                                 <div>
                                   <div className={`rounded-lg p-3 ${isOwn ? 'bg-blue-600 text-white' : 'bg-slate-100 dark:bg-slate-900'}`}>
-                                    <p className="text-sm">{message.content}</p>
+                                    <p className="text-sm break-words">{message.content}</p>
                                   </div>
                                   <div className={`text-xs text-muted-foreground mt-1 ${isOwn ? 'text-right' : ''}`}>
                                     {formatDistanceToNow(new Date(message.createdAt), { addSuffix: true })}
+                                    {isOwn && message.isRead ? ' • Read' : ''}
                                   </div>
                                 </div>
                               </div>
