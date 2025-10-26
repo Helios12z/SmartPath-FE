@@ -11,6 +11,7 @@ import { GraduationCap } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import { useAuth } from '@/context/AuthContext';
 import { authAPI } from '@/lib/api/authAPI';
+import { Role } from '@/lib/types';
 
 export default function RegisterPage() {
   const router = useRouter();
@@ -29,7 +30,6 @@ export default function RegisterPage() {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
 
-    // ✅ Kiểm tra dữ liệu cơ bản
     if (!formData.username.trim()) {
       toast({
         title: 'Error',
@@ -60,12 +60,12 @@ export default function RegisterPage() {
     setLoading(true);
 
     try {
-      // ✅ Gọi API register (có username thật)
       await authAPI.register({
         Email: formData.email,
         Username: formData.username,
         Password: formData.password,
         FullName: formData.fullName,
+        Role: Role.Student
       });
 
       await refreshProfile?.();

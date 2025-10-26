@@ -41,6 +41,7 @@ export type RegisterRequest = {
   Username: string;
   Password: string;
   FullName: string;
+  Role: Role
 };
 
 export type AuthResponse = {
@@ -164,7 +165,9 @@ export interface SystemLog {
   user_id: string;
   action: string;
   description?: string;
-  created_at: string;
+  target_type?: 'post' | 'comment' | 'reaction' | 'report'; 
+  createdAt: string;
+  url: string;
 }
 
 export interface Category {
@@ -212,22 +215,21 @@ export interface EventRegistration {
   created_at: string;
 }
 
-export interface Badge {
+export interface BadgeRequestDto {
+  point: number;
+  name: string;
+}
+
+export interface BadgeResponseDto {
   id: string;
   point: number;
   name: string;
-  description?: string;
 }
 
 export interface UserAchievement {
   id: string;
   user_id: string;
   badge_id: string;
-  awarded_at: string;
-  note?: string;
-}
-
-export interface BadgeAward extends Badge {
   awarded_at: string;
   note?: string;
 }
@@ -253,7 +255,7 @@ export interface FriendshipResponseDto {
   createdAt: string;
 }
 export interface FriendSummaryDto {
-  id: string;                 // userId của friend
+  id: string;                 
   username: string;
   fullName?: string;
   avatarUrl?: string | null;
@@ -261,3 +263,68 @@ export interface FriendSummaryDto {
   primaryBadge?: { id: string; name: string } | null;
   isMutual?: boolean;
 }
+
+export enum Role {
+  Admin,
+  Student 
+}
+
+export enum BotMessageRole {
+  System = 0,
+  User = 1,
+  Assistant = 2,
+}
+
+export interface BotConversationCreateRequest {
+  title?: string | null;
+  systemPrompt?: string | null;
+}
+
+export interface BotConversationResponse {
+  id: string;
+  title?: string | null;
+  createdAt: string;
+  updatedAt?: string | null;
+  messageCount: number;
+}
+
+export interface BotMessageRequest {
+  conversationId: string;
+  content: string;
+  role: BotMessageRole; // 0 System, 1 User, 2 Assistant
+
+  promptTokens?: number | null;
+  completionTokens?: number | null;
+  totalTokens?: number | null;
+  latencyMs?: number | null;
+  toolCallsJson?: string | null;
+}
+
+export interface BotMessageResponse {
+  id: string;
+  conversationId: string;
+  role: BotMessageRole;
+  content: string;
+  createdAt: string;
+
+  promptTokens?: number | null;
+  completionTokens?: number | null;
+  totalTokens?: number | null;
+  latencyMs?: number | null;
+  toolCallsJson?: string | null;
+}
+
+export interface BotConversationWithMessagesResponse extends BotConversationResponse {
+  messages: BotMessageResponse[];
+}
+
+export interface RenameConversationRequest {
+  title: string;
+}
+
+export type PageResult<T> = {
+  total: number;
+  page: number;
+  pageSize: number;
+  items: T[];
+};

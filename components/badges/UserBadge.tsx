@@ -3,7 +3,7 @@
 import { cn } from '@/lib/utils';
 import type { Badge as BadgeMeta, BadgeAward } from '@/lib/types';
 import { Badge as UiBadge } from '@/components/ui/badge';
-import { Sparkles, Medal, Trophy, Crown, Award as AwardIcon } from 'lucide-react';
+import { Sparkles, Medal, Trophy, Crown, Award as AwardIcon, LucideIcon } from 'lucide-react';
 
 type UserBadgeProps = {
   badge?: BadgeMeta | BadgeAward | null;

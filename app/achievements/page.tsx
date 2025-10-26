@@ -1,72 +1,71 @@
 'use client';
 
-import { useMemo } from 'react';
-import { format } from 'date-fns';
+import { useEffect, useMemo, useState } from 'react';
 import { Navbar } from '@/components/layout/Navbar';
 import { Sidebar } from '@/components/layout/Sidebar';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge as BadgePill } from '@/components/ui/badge';
 import { Progress } from '@/components/ui/progress';
-import { mockStore } from '@/lib/mockStore';
 import { useAuth } from '@/context/AuthContext';
-import type { Badge, UserAchievement } from '@/lib/types';
-import { Trophy, Medal, Flame, Target } from 'lucide-react';
+import { Trophy, Medal, Target } from 'lucide-react';
+import { badgeAPI } from '@/lib/api/badgeAPI';
+import type { BadgeResponseDto } from '@/lib/types';
 
-type BadgeWithStatus = Badge & {
+type BadgeWithStatus = {
+  id: string;
+  name: string;
+  point: number;
+  description?: string | null;
   earned: boolean;
-  awarded_at?: string;
-  note?: string;
 };
 
 export default function AchievementsPage() {
   const { profile } = useAuth();
 
-  const badges = useMemo(
-    () =>
-      mockStore
-        .getBadges()
-        .sort((a, b) => a.point - b.point),
-    [],
-  );
+  const [badgesApi, setBadgesApi] = useState<BadgeResponseDto[]>([]);
+  const [loadingBadges, setLoadingBadges] = useState<boolean>(true);
+  const [errorBadges, setErrorBadges] = useState<string | null>(null);
 
-  const achievements = useMemo<UserAchievement[]>(
-    () =>
-      mockStore
-        .getUserAchievements(profile?.id)
-        .sort(
-          (a, b) => new Date(b.awarded_at).getTime() - new Date(a.awarded_at).getTime(),
-        ),
-    [profile?.id],
-  );
+  useEffect(() => {
+    let mounted = true;
+    (async () => {
+      try {
+        setLoadingBadges(true);
+        const data = await badgeAPI.getAll();
+        if (!mounted) return;
+        setBadgesApi([...data].sort((a, b) => a.point - b.point));
+        setErrorBadges(null);
+      } catch (err: any) {
+        if (!mounted) return;
+        setErrorBadges(err?.message ?? 'Failed to load badges');
+      } finally {
+        if (mounted) setLoadingBadges(false);
+      }
+    })();
+    return () => {
+      mounted = false;
+    };
+  }, []);
 
-  const earnedBadgeIds = useMemo(
-    () => new Set(achievements.map((achievement) => achievement.badge_id)),
-    [achievements],
-  );
+  // Tổng điểm danh tiếng (theo bạn đang dùng profile.point)
+  const totalReputation = profile?.point ?? 0;
 
-  const badgesWithStatus: BadgeWithStatus[] = useMemo(
-    () =>
-      badges.map((badge) => {
-        const earned = earnedBadgeIds.has(badge.id);
-        const achievement = achievements.find((item) => item.badge_id === badge.id);
-        return {
-          ...badge,
-          earned,
-          awarded_at: achievement?.awarded_at,
-          note: achievement?.note,
-        };
-      }),
-    [badges, achievements, earnedBadgeIds],
-  );
+  // Map từ BadgeResponseDto -> BadgeWithStatus (earned dựa vào điểm user)
+  const badgesWithStatus: BadgeWithStatus[] = useMemo(() => {
+    return badgesApi.map((b) => ({
+      id: b.id,
+      name: b.name,
+      point: b.point,
+      description: null, // backend chưa có description
+      earned: totalReputation >= b.point,
+    }));
+  }, [badgesApi, totalReputation]);
 
-  const totalReputation = profile?.reputation_points ?? 0;
+  // Thống kê
   const earnedCount = badgesWithStatus.filter((badge) => badge.earned).length;
   const nextBadge = badgesWithStatus.find((badge) => !badge.earned);
   const previousBadge =
-    badgesWithStatus
-      .filter((badge) => badge.earned)
-      .sort((a, b) => a.point - b.point)
-      .at(-1) ?? null;
+    badgesWithStatus.filter((b) => b.earned).sort((a, b) => a.point - b.point).at(-1) ?? null;
 
   const progressToNext = (() => {
     if (!nextBadge) return 100;
@@ -76,6 +75,39 @@ export default function AchievementsPage() {
     const progress = totalReputation - prevPoint;
     return Math.min(100, Math.max(0, (progress / range) * 100));
   })();
+
+  // Loading / Error UI cho badges
+  if (loadingBadges) {
+    return (
+      <div className="min-h-screen bg-slate-50 dark:bg-slate-950">
+        <Navbar />
+        <div className="flex">
+          <Sidebar />
+          <main className="flex-1 p-6 max-w-5xl mx-auto w-full space-y-8">
+            <Card className="p-8">
+              <p className="text-sm text-muted-foreground">Loading badges…</p>
+            </Card>
+          </main>
+        </div>
+      </div>
+    );
+  }
+
+  if (errorBadges) {
+    return (
+      <div className="min-h-screen bg-slate-50 dark:bg-slate-950">
+        <Navbar />
+        <div className="flex">
+          <Sidebar />
+          <main className="flex-1 p-6 max-w-5xl mx-auto w-full space-y-8">
+            <Card className="p-8">
+              <p className="text-sm text-red-600">Failed to load badges: {errorBadges}</p>
+            </Card>
+          </main>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="min-h-screen bg-slate-50 dark:bg-slate-950">
@@ -101,7 +133,7 @@ export default function AchievementsPage() {
                 <p className="text-3xl font-semibold">{totalReputation}</p>
                 <p className="text-sm text-blue-100">
                   {nextBadge
-                    ? `${nextBadge.point - totalReputation} points away from ${nextBadge.name}`
+                    ? `${Math.max(nextBadge.point - totalReputation, 0)} points away from ${nextBadge.name}`
                     : 'You reached the highest tier!'}
                 </p>
               </div>
@@ -109,7 +141,7 @@ export default function AchievementsPage() {
                 <p className="text-sm text-blue-100">Badges earned</p>
                 <p className="text-3xl font-semibold">{earnedCount}</p>
                 <p className="text-sm text-blue-100">
-                  {badges.length - earnedCount} more to collect
+                  {badgesWithStatus.length - earnedCount} more to collect
                 </p>
               </div>
               <div>
@@ -127,7 +159,7 @@ export default function AchievementsPage() {
           <section className="space-y-4">
             <div className="flex items-center gap-2">
               <h2 className="text-xl font-semibold">Badge Collection</h2>
-              <BadgePill variant="secondary">{badges.length}</BadgePill>
+              <BadgePill variant="secondary">{badgesWithStatus.length}</BadgePill>
             </div>
             <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
               {badgesWithStatus.map((badge) => (
@@ -147,15 +179,14 @@ export default function AchievementsPage() {
                             badge.earned ? 'text-amber-500' : 'text-slate-400'
                           }`}
                         />
-                        <CardTitle className="text-lg font-semibold">
-                          {badge.name}
-                        </CardTitle>
+                        <CardTitle className="text-lg font-semibold">{badge.name}</CardTitle>
                       </div>
                       <BadgePill variant={badge.earned ? 'default' : 'outline'}>
                         {badge.point} pts
                       </BadgePill>
                     </div>
-                    <p className="text-sm text-muted-foreground">{badge.description}</p>
+                    {/* Backend chưa có description -> fallback để không vỡ UI */}
+                    <p className="text-sm text-muted-foreground">{badge.description ?? ''}</p>
                   </CardHeader>
                   <CardContent className="space-y-3 text-sm">
                     <div className="flex items-center gap-2 text-muted-foreground">
@@ -166,63 +197,10 @@ export default function AchievementsPage() {
                           : `${Math.max(badge.point - totalReputation, 0)} points to unlock`}
                       </span>
                     </div>
-                    {badge.earned ? (
-                      <div className="text-xs text-muted-foreground">
-                        <p>
-                          Earned on {badge.awarded_at ? format(new Date(badge.awarded_at), 'PPP') : '—'}
-                        </p>
-                        {badge.note && <p className="mt-1 italic">“{badge.note}”</p>}
-                      </div>
-                    ) : (
-                      <div className="text-xs text-muted-foreground">
-                        <p>
-                          Stay active in discussions, help peers, and share study resources to climb higher.
-                        </p>
-                      </div>
-                    )}
                   </CardContent>
                 </Card>
               ))}
             </div>
-          </section>
-
-  <section className="space-y-4">
-            <div className="flex items-center gap-2">
-              <h2 className="text-xl font-semibold">Milestone Timeline</h2>
-              <BadgePill variant="outline">{achievements.length}</BadgePill>
-            </div>
-            {achievements.length === 0 ? (
-              <Card className="p-10 text-center">
-                <p className="text-muted-foreground">
-                  Start participating in the community to unlock your first badge.
-                </p>
-              </Card>
-            ) : (
-              <Card>
-                <CardContent className="divide-y divide-slate-200 dark:divide-slate-800 p-0">
-                  {achievements.map((achievement) => {
-                    const badge = badges.find((item) => item.id === achievement.badge_id);
-                    if (!badge) return null;
-                    return (
-                      <div key={achievement.id} className="flex items-center gap-4 p-4">
-                        <div className="flex h-10 w-10 items-center justify-center rounded-full bg-amber-100 text-amber-600 dark:bg-amber-900/30 dark:text-amber-400">
-                          <Flame className="h-5 w-5" />
-                        </div>
-                        <div className="flex-1">
-                          <p className="font-medium text-foreground">{badge.name}</p>
-                          <p className="text-sm text-muted-foreground">
-                            {achievement.note || 'Milestone unlocked through consistent contributions.'}
-                          </p>
-                        </div>
-                        <div className="text-xs text-muted-foreground">
-                          {format(new Date(achievement.awarded_at), 'PPP')}
-                        </div>
-                      </div>
-                    );
-                  })}
-                </CardContent>
-              </Card>
-            )}
           </section>
         </main>
       </div>
