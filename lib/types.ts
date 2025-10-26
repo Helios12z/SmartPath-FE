@@ -113,26 +113,35 @@ export interface ReportRequestDto {
   details?: string;
 }
 
-export interface Chat {
+export interface ChatOtherUser {
   id: string;
-  participant_ids: string[];
-  title?: string | null;
-  last_message?: string | null;
-  updated_at: string;
-}
-
-export interface ChatRequestDto {
-  participant_ids: string[];
-  title?: string | null;
+  username: string;
+  fullName: string;
+  avatarUrl?: string | null;
 }
 
 export interface Message {
   id: string;
-  chat_id: string;
-  sender_id: string;
   content: string;
-  created_at: string;
-  is_read: boolean;
+  senderId: string;
+  senderUsername: string;
+  isRead: boolean;
+  createdAt: string;
+}
+
+export interface Chat {
+  id: string;
+  name?: string | null;
+  member1Id: string;
+  member2Id: string;
+  otherUser?: ChatOtherUser | null;   
+  messages: Message[];
+}
+
+export interface ChatCreatePayload {
+  member1Id: string;
+  member2Id: string;
+  name?: string | null;
 }
 
 export interface MessageRequestDto {

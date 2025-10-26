@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useEffect, useMemo, useCallback } from 'react';
-import { useParams } from 'next/navigation';
+import { useParams, useRouter } from 'next/navigation';
 import { useAuth } from '@/context/AuthContext';
 import { Navbar } from '@/components/layout/Navbar';
 import { Sidebar } from '@/components/layout/Sidebar';
@@ -28,6 +28,7 @@ import type { UserProfile, BadgeAward, FriendshipResponseDto } from '@/lib/types
 import { useToast } from '@/hooks/use-toast';
 import { UserBadge } from '@/components/badges/UserBadge';
 import { userAPI } from '@/lib/api/userAPI';
+import { chatAPI } from '@/lib/api/chatAPI';
 import { friendshipAPI } from '@/lib/api/friendshipAPI';
 import AvatarCropDialog from '@/components/profile/AvatarCropDialog';
 import { postAPI } from '@/lib/api/postAPI';
@@ -317,7 +318,18 @@ export default function ProfilePage() {
     [profileId, profileData, toast]
   );
 
-  // ===== NEW: actions follow/unfollow/accept/reject
+  const router = useRouter();
+
+  const handleMessage = useCallback(async () => {
+    if (!profileId) return;
+    try {
+      const chat = await chatAPI.getOrCreateDirect(profileId);
+      router.push(`/messages/${chat.id}`);
+    } catch (e: any) {
+      toast({ title: 'Error', description: e?.message ?? 'Cannot open chat', variant: 'destructive' });
+    }
+  }, [profileId, router, toast]);
+
   const doFollow = async () => {
     if (!currentUser?.id || !profileId || working) return;
     setWorking(true);
@@ -587,7 +599,7 @@ export default function ProfilePage() {
                             <X className="mr-2 h-4 w-4" />
                             Unfollow
                           </Button>
-                          <Button size="sm" variant="outline">
+                          <Button size="sm" variant="outline" onClick={handleMessage}>
                             <Mail className="mr-2 h-4 w-4" />
                             Message
                           </Button>
