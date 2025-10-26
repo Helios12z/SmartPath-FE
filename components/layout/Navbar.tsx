@@ -66,27 +66,54 @@ export function Navbar() {
     try {
       if (!n.isRead) await markRead(n.id);
 
-      if (typeof n?.url === 'string' && n.url.trim().length > 0) {
-        const raw = n.url.trim();
+      const postIdFromN =
+        n?.postId ?? n?.PostId ?? n?.post_id ?? n?.entityId ?? n?.resourceId ?? n?.meta?.postId ?? n?.data?.postId;
+      const commentIdFromN =
+        n?.commentId ?? n?.CommentId ?? n?.comment_id ?? n?.meta?.commentId ?? n?.data?.commentId;
 
-        // Nếu là follow request → mở tab Requests
+      if (typeof n?.url === 'string' && n.url.trim()) {
+        let raw = n.url.trim();
+
         if (n?.type === 'friend.request' || raw.startsWith('/friends')) {
           router.push('/friends?tab=requests');
           return;
         }
 
-        router.push(raw);
+        let path = raw, qs = '', hash = '';
+        try {
+          const u = new URL(raw, typeof window !== 'undefined' ? window.location.origin : 'https://dummy.local');
+          path = u.pathname;
+          qs = u.search;
+          hash = u.hash;
+        } catch { /* do nothing */ }
+
+        const rx = /^\/(posts|post|forum\/posts)\/([^/?#]+)/i;
+        const mm = path.match(rx);
+        if (mm) path = `/forum/${mm[2]}`;
+
+        const cidFromQuery = (qs.match(/[?&](?:c|commentId|comment)=([^&#]+)/i) || [])[1];
+        const cid = cidFromQuery || (commentIdFromN ? String(commentIdFromN) : '');
+
+        if (cid) {
+          const sp = new URLSearchParams(qs.replace(/^\?/, ''));
+          sp.set('c', cid);              
+          qs = `?${sp.toString()}`;
+          hash = `#comment-${encodeURIComponent(cid)}`; 
+        }
+
+        router.push(`${path}${qs}${hash}`);
         return;
       }
 
-      // 2) Forum fallback (post/comment)
-      const url = buildForumUrlFromNotification(n);
-      if (url) {
-        router.push(url);
+      const pid = postIdFromN && String(postIdFromN);
+      if (pid) {
+        const cid = commentIdFromN && String(commentIdFromN);
+        const qs = cid ? `?c=${encodeURIComponent(cid)}` : '';
+        const hash = cid ? `#comment-${encodeURIComponent(cid)}` : '';
+        router.push(`/forum/${pid}${qs}${hash}`);
         return;
       }
 
-      // 3) Cuối cùng
       router.push('/forum');
     } catch (e) {
       console.error(e);
@@ -121,9 +148,7 @@ export function Navbar() {
     if (typeof postId === 'string' && postId.length > 0) {
       return `/forum/${postId}${commentId ? `?c=${encodeURIComponent(commentId)}` : ''}`;
     }
-
-    // 3) Tùy theo type có thể suy luận postId (nếu bạn muốn mở rộng thêm ở đây)
-
+    
     return null;
   }
 

@@ -252,6 +252,16 @@ export default function PostDetailPage() {
 
   type ReactionKind = 'like' | 'dislike';
 
+  function findPath(nodes: UIComment[], id: string, acc: UIComment[] = []): UIComment[] | null {
+    for (const n of nodes) {
+      const path = [...acc, n];
+      if (n.id === id) return path;
+      const sub = findPath(n.children ?? [], id, path);
+      if (sub) return sub;
+    }
+    return null;
+  }
+
   const handleReact = async (kind: ReactionKind) => {
     if (!profile?.id || !postId) {
       toast({
@@ -490,10 +500,8 @@ export default function PostDetailPage() {
         );
       }
 
-      // reload tree để thấy material
       await loadComments();
 
-      // reset form
       cImages.forEach((i) => URL.revokeObjectURL(i.preview));
       setCImages([]); setCDocs([]); setCUploadProgress(0);
       setNewComment('');
@@ -514,26 +522,72 @@ export default function PostDetailPage() {
     const text = content.trim();
     if (!text) return;
 
-    const target = findComment(comments, parentId);
-    let effectiveParentId = parentId;
-    if (target && (target.depth ?? 0) >= 2 && target.parent_comment_id) {
-      effectiveParentId = target.parent_comment_id;
-    }
+    // Xác định parent theo path để tránh sai khi reply sâu
+    const path = findPath(comments, parentId);
+    if (!path) return;
+    const MAX_PARENT_DEPTH = 1;
+    const effectiveParentId = path[Math.min(MAX_PARENT_DEPTH, path.length - 1)].id;
 
     try {
-      const payload: CommentRequestDto = { postId, content: text, parentCommentId: effectiveParentId };
-      const created = await commentAPI.create(payload);
+      // 1) Tạo comment ở backend
+      const created = await commentAPI.create({
+        postId,
+        content: text,
+        parentCommentId: effectiveParentId,
+      });
 
-      // upload files -> { commentId: created.id }
-      const imgJobs = images.map((f) =>
-        materialAPI.uploadImage(f, { commentId: created.id, title: f.name, description: 'image' })
-      );
-      const docJobs = docs.map((f) =>
-        materialAPI.uploadDocuments([f], { commentId: created.id, title: f.name, description: 'document' })
-      );
-      await Promise.allSettled([...imgJobs, ...docJobs]);
+      // 2) HYDRATE ngay dữ liệu thiếu để hiển thị không bị "unknown"
+      const hydrated = {
+        id: created.id,
+        content: text,
+        authorId: profile.id,
+        authorUsername: profile.fullName || profile.username || 'You',
+        authorAvatarUrl: profile.avatarUrl ?? null,
+        authorPoint: profile.point ?? 0,
+        createdAt: created.createdAt ?? new Date().toISOString(),
+        replies: [],
+        isPositiveReacted: null,
+        isNegativeReacted: null,
+        positiveReactionCount: 0,
+        negativeReactionCount: 0,
+      };
 
-      setComments((prev) => insertReplyIntoTree(prev, effectiveParentId, created, 2));
+      // 3) Chèn vào UI tree ngay (optimistic)
+      setComments((prev) => insertReplyIntoTree(prev, effectiveParentId, hydrated, 2));
+
+      // 4) Upload files → gom lại materials trả về để gắn ngay cho comment mới
+      const uploadedImgs = await Promise.allSettled(
+        images.map((f) => materialAPI.uploadImage(f, { commentId: created.id, title: f.name, description: 'image' }))
+      );
+      const uploadedDocs = await Promise.allSettled(
+        docs.map((f) => materialAPI.uploadDocuments([f], { commentId: created.id, title: f.name, description: 'document' }))
+      );
+
+      // Chuẩn hoá danh sách MaterialResponse từ kết quả (tùy API của bạn trả 1 hay mảng)
+      const flatFromSettled = (arr: PromiseSettledResult<any>[]) =>
+        arr
+          .filter((r): r is PromiseFulfilledResult<any> => r.status === 'fulfilled')
+          .flatMap((r) => (Array.isArray(r.value) ? r.value : [r.value]))
+          .filter(Boolean);
+
+      const newMats = [...flatFromSettled(uploadedImgs), ...flatFromSettled(uploadedDocs)] as MaterialResponse[];
+
+      if (newMats.length > 0) {
+        setComments((prev) => {
+          // gắn materials vào đúng comment vừa tạo
+          const clone = structuredClone(prev) as UIComment[];
+          const stack = [...clone];
+          while (stack.length) {
+            const node = stack.pop()!;
+            if (node.id === created.id) {
+              node.materials = [...(node.materials ?? []), ...newMats];
+              break;
+            }
+            if (node.children?.length) stack.push(...node.children);
+          }
+          return clone;
+        });
+      }
 
       toast({ title: 'Success', description: 'Reply posted successfully' });
     } catch (e) {
