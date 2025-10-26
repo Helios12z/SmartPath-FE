@@ -282,7 +282,6 @@ export default function ChatbotPage() {
                           <div className="flex flex-col">
                             <span className="font-medium truncate max-w-[200px]">{c.title || 'New Chat'}</span>
                             <span className="text-xs text-muted-foreground">
-                              {c.messageCount} tin nhắn ·{' '}
                               {formatDistanceToNow(new Date(c.updatedAt ?? c.createdAt), { addSuffix: true })}
                             </span>
                           </div>
