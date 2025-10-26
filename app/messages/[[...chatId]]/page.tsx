@@ -1,5 +1,3 @@
-// src/app/messages/[...chatId]/page.tsx (chỉ phần khác biệt, bạn có thể paste đè)
-
 'use client';
 
 import { useEffect, useState, useCallback, useMemo, useRef } from 'react';
@@ -54,7 +52,7 @@ export default function MessagesPage() {
       });
 
       if (selectedChatId === m.chatId && m.senderId !== currentUser?.id) {
-        messageAPI.markRead(m.id).catch(() => { });
+        messageAPI.markRead(m.id).catch(() => {});
       }
     },
     onMessageRead: (raw) => {
@@ -72,7 +70,6 @@ export default function MessagesPage() {
     }
   });
 
-  // load chats
   useEffect(() => {
     (async () => {
       try {
@@ -92,7 +89,6 @@ export default function MessagesPage() {
     })();
   }, [chatIdFromUrl, router]);
 
-  // load chat detail & join group
   useEffect(() => {
     if (!selectedChatId) { setSelectedChat(null); return; }
     (async () => {
@@ -102,7 +98,7 @@ export default function MessagesPage() {
 
         if (connected) {
           if (lastJoinedRef.current && lastJoinedRef.current !== selectedChatId) {
-            await leave(lastJoinedRef.current).catch(() => { });
+            await leave(lastJoinedRef.current).catch(() => {});
           }
           await join(selectedChatId);
           lastJoinedRef.current = selectedChatId;
@@ -125,7 +121,6 @@ export default function MessagesPage() {
       const saved = await messageAPI.send({ chat_id: selectedChatId, content: messageInput.trim() });
       setMessageInput('');
 
-      // Normalize vì backend trả PascalCase (Id, ChatId, CreatedAt,...)
       const m: Message = {
         id: (saved as any).id ?? (saved as any).Id,
         chatId: (saved as any).chatId ?? (saved as any).ChatId ?? selectedChatId,
@@ -136,24 +131,20 @@ export default function MessagesPage() {
         createdAt: (saved as any).createdAt ?? (saved as any).CreatedAt ?? new Date().toISOString(),
       };
 
-      // Append ngay lập tức (authoritative), vẫn chống duplicate
       setSelectedChat(prev => {
         if (!prev || prev.id !== m.chatId) return prev;
         if (prev.messages?.some(x => x.id === m.id)) return prev;
         return { ...prev, messages: [...(prev.messages ?? []), m] } as Chat;
       });
-
-      // Không cần markRead cho tin mình gửi
     } catch (e) {
       console.error(e);
     }
   };
 
-  // auto mark read khi mở chat (optional)
   useEffect(() => {
     if (!selectedChat || !currentUser?.id) return;
     const unread = (selectedChat.messages ?? []).filter(m => !m.isRead && m.senderId !== currentUser.id);
-    unread.forEach(m => messageAPI.markRead(m.id).catch(() => { }));
+    unread.forEach(m => messageAPI.markRead(m.id).catch(() => {}));
   }, [selectedChat, currentUser?.id]);
 
   const otherMember = useMemo(() => selectedChat?.otherUser ?? null, [selectedChat]);
@@ -170,9 +161,10 @@ export default function MessagesPage() {
               <p className="text-muted-foreground">Chat with friends and groups</p>
             </div>
 
-            <div className="grid grid-cols-12 gap-4 h-[600px]">
+            {/* Khung cố định chiều cao, con tự cuộn */}
+            <div className="grid grid-cols-12 gap-4 h-[70vh] min-h-0">
               {/* Sidebar chats */}
-              <Card className="col-span-4">
+              <Card className="col-span-4 min-h-0">
                 <ScrollArea className="h-full">
                   <div className="p-4 space-y-2">
                     {loading ? (
@@ -192,8 +184,9 @@ export default function MessagesPage() {
                           <button
                             key={chat.id}
                             onClick={() => handleSelectChat(chat.id)}
-                            className={`w-full p-3 rounded-lg hover:bg-slate-100 dark:hover:bg-slate-900 transition-colors text-left ${selectedChatId === chat.id ? 'bg-slate-100 dark:bg-slate-900' : ''
-                              }`}
+                            className={`w-full p-3 rounded-lg hover:bg-slate-100 dark:hover:bg-slate-900 transition-colors text-left ${
+                              selectedChatId === chat.id ? 'bg-slate-100 dark:bg-slate-900' : ''
+                            }`}
                           >
                             <div className="flex items-center gap-3">
                               <Avatar>
@@ -216,7 +209,7 @@ export default function MessagesPage() {
               </Card>
 
               {/* Main pane */}
-              <Card className="col-span-8 flex flex-col">
+              <Card className="col-span-8 flex min-h-0 flex-col">
                 {selectedChat ? (
                   <>
                     <div className="p-4 border-b flex items-center gap-3">
@@ -232,7 +225,8 @@ export default function MessagesPage() {
                       </div>
                     </div>
 
-                    <ScrollArea className="flex-1 p-4">
+                    {/* Quan trọng: flex-1 + min-h-0 để phần này cuộn, không đẩy card */}
+                    <ScrollArea className="flex-1 min-h-0 p-4 overflow-y-auto">
                       <div className="space-y-4">
                         {(selectedChat.messages ?? []).map((message) => {
                           const isOwn = message.senderId === currentUser?.id;
@@ -240,12 +234,15 @@ export default function MessagesPage() {
                             <div key={message.id} className={`flex ${isOwn ? 'justify-end' : 'justify-start'}`}>
                               <div className={`flex gap-2 max-w-[70%] ${isOwn ? 'flex-row-reverse' : ''}`}>
                                 <Avatar className="h-8 w-8">
-                                  <AvatarImage src={isOwn ? (currentUser?.avatarUrl ?? '') : (otherMember?.avatarUrl ?? '')} alt={message.senderUsername} />
+                                  <AvatarImage
+                                    src={isOwn ? (currentUser?.avatarUrl ?? '') : (otherMember?.avatarUrl ?? '')}
+                                    alt={message.senderUsername}
+                                  />
                                   <AvatarFallback>{message.senderUsername?.charAt(0) ?? 'U'}</AvatarFallback>
                                 </Avatar>
                                 <div>
                                   <div className={`rounded-lg p-3 ${isOwn ? 'bg-blue-600 text-white' : 'bg-slate-100 dark:bg-slate-900'}`}>
-                                    <p className="text-sm break-words">{message.content}</p>
+                                    <p className="text-sm break-words whitespace-pre-wrap">{message.content}</p>
                                   </div>
                                   <div className={`text-xs text-muted-foreground mt-1 ${isOwn ? 'text-right' : ''}`}>
                                     {formatDistanceToNow(new Date(message.createdAt), { addSuffix: true })}
