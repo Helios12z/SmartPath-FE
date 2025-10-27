@@ -39,7 +39,7 @@ export function mapPostToUI(p: PostResponseDto): UIPost {
       id: p.authorId,
       full_name: p.authorUsername ?? 'Unknown',
       avatar_url: p.authorAvatarUrl ?? null,
-      reputation_points: 0,      
+      reputation_points: p.authorPoint,      
       primaryBadge: null,        
     },
 

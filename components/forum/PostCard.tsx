@@ -1,11 +1,14 @@
+'use client';
+
 import Link from 'next/link';
 import { formatDistanceToNow } from 'date-fns';
 import { Card, CardContent, CardHeader } from '@/components/ui/card';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { Badge } from '@/components/ui/badge';
-import { Heart, MessageSquare, Eye, Pin, ThumbsDown } from 'lucide-react';
-import { UserBadge } from '@/components/badges/UserBadge';
+import { Heart, MessageSquare, Pin, ThumbsDown } from 'lucide-react';
 import type { UIPost } from '@/lib/mappers/postMapper';
+import { useBadgesCatalog, pickPrimaryBadgeByPoints } from '@/hooks/use-badge-catalog';
+import { BadgePillFancy } from './BadgePillFancy';
 
 interface PostCardProps {
   post: UIPost & {
@@ -14,8 +17,8 @@ interface PostCardProps {
   };
   onLike?: () => void;
   onDislike?: () => void;
-  isLiked?: boolean;     
-  isDisliked?: boolean;  
+  isLiked?: boolean;
+  isDisliked?: boolean;
 }
 
 export function PostCard({
@@ -28,6 +31,14 @@ export function PostCard({
   const liked = typeof isLiked === 'boolean' ? isLiked : post.isPositiveReacted === true;
   const disliked = typeof isDisliked === 'boolean' ? isDisliked : post.isNegativeReacted === true;
 
+  // Lấy catalog badge và chọn badge theo điểm (ưu tiên badge đã có sẵn từ mapper)
+  const badges = useBadgesCatalog();
+  const primaryBadge =
+    post.author.primaryBadge ??
+    pickPrimaryBadgeByPoints(badges, post.author.reputation_points);
+  
+  console.log(post.author.reputation_points)
+
   return (
     <Card className="hover:shadow-md transition-shadow">
       <CardHeader className="pb-3">
@@ -35,15 +46,11 @@ export function PostCard({
           <div className="flex items-start gap-3 flex-1 min-w-0">
             <Avatar className="h-10 w-10">
               <AvatarImage src={post.author.avatar_url ?? undefined} alt={post.author.full_name} />
-              <AvatarFallback>{post.author.full_name.charAt(0).toUpperCase()}</AvatarFallback>
+              <AvatarFallback>{post.author.full_name?.charAt(0)?.toUpperCase()}</AvatarFallback>
             </Avatar>
+
             <div className="flex-1 min-w-0">
               <div className="flex flex-col gap-1 min-w-0">
-                {post.author.primaryBadge && (
-                  <div>
-                    <UserBadge badge={post.author.primaryBadge} size="sm" />
-                  </div>
-                )}
                 <div className="flex items-center gap-2 min-w-0">
                   <Link
                     href={`/profile/${post.author.id}`}
@@ -51,11 +58,12 @@ export function PostCard({
                   >
                     {post.author.full_name}
                   </Link>
-                  <Badge variant="secondary" className="text-xs">
-                    {post.author.reputation_points} pts
-                  </Badge>
+
+                  {/* HIỂN THỊ BADGE CỦA TÁC GIẢ — thay cho reputation points */}
+                  <BadgePillFancy badge={primaryBadge} />
                 </div>
               </div>
+
               <p className="text-xs text-muted-foreground">
                 {formatDistanceToNow(new Date(post.created_at), { addSuffix: true })}
               </p>

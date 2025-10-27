@@ -58,6 +58,7 @@ export interface PostResponseDto {
   createdAt: string;            
   updatedAt?: string | null;
   authorUsername?: string | null;
+  authorPoint: number
   authorId: string;
   authorAvatarUrl?: string | null;
   commentCount: number;

@@ -18,6 +18,9 @@ import type { PostResponseDto, CommentRequestDto } from '@/lib/types';
 import { mapPostToUI, type UIPost } from '@/lib/mappers/postMapper';
 import { mapUserToPostOwner, type PostOwner } from '@/lib/mappers/postOwnerMapper';
 
+import { useBadgesCatalog, pickPrimaryBadgeByPoints } from '@/hooks/use-badge-catalog';
+import { BadgePillFancy } from '@/components/forum/BadgePillFancy';
+
 import {
   mapCommentsToUITree,
   insertReplyIntoTree,
@@ -137,6 +140,16 @@ export default function PostDetailPage() {
   }
 
   const totalComments = useMemo(() => countTree(comments), [comments]);
+
+  const badges = useBadgesCatalog();
+  const primaryBadge = useMemo(
+    () =>
+      uiPost
+        ? uiPost.author.primaryBadge ??
+          pickPrimaryBadgeByPoints(badges, uiPost.author.reputation_points ?? 0)
+        : null,
+    [uiPost, badges]
+  );
 
   const loadPost = useCallback(async () => {
     if (!postId) return;
@@ -690,9 +703,7 @@ export default function PostDetailPage() {
                 {uiPost.author.full_name}
               </Link>
               <div className="flex items-center gap-2 text-xs text-muted-foreground">
-                <Badge variant="secondary">
-                  {uiPost.author.reputation_points ?? 0} pts
-                </Badge>
+                <BadgePillFancy badge={primaryBadge} />
                 <span>
                   {formatDistanceToNow(new Date(uiPost.created_at), { addSuffix: true })}
                 </span>
