@@ -1,15 +1,18 @@
+'use client';
+
 import { useState } from 'react';
 import Link from 'next/link';
 import { formatDistanceToNow } from 'date-fns';
 
 import { Card, CardContent } from '@/components/ui/card';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
-import { Badge } from '@/components/ui/badge';
 import { Textarea } from '@/components/ui/textarea';
 import { Button } from '@/components/ui/button';
-import { Heart, ThumbsDown, Send, ImagePlus, FilePlus2, FileText, X } from 'lucide-react';
+import { Heart, ThumbsDown, Send, ImagePlus, FilePlus2, FileText, X, Trophy, Medal, Gem } from 'lucide-react';
 
 import type { UIComment } from '@/lib/mappers/commentMapper';
+
+import { useBadgesCatalog, pickPrimaryBadgeByPoints } from '@/hooks/use-badge-catalog';
 
 type QueuedImage = { id: string; file: File; preview: string };
 type QueuedDoc = { id: string; file: File };
@@ -30,6 +33,104 @@ interface CommentCardProps {
   onPreview?: (url: string) => void;
 }
 
+type PrimaryBadge = {
+  id: string;
+  name: string;
+  point: number; 
+  description?: string | null;
+};
+
+const classifyBadgeTier = (point: number) => {
+  if (point >= 1000) return 'diamond';
+  if (point >= 500) return 'platinum';
+  if (point >= 250) return 'gold';
+  if (point >= 100) return 'silver';
+  return 'bronze';
+};
+
+function BadgePillFancy({ badge }: { badge?: PrimaryBadge | null }) {
+  if (!badge) {
+    return (
+      <span
+        className="inline-flex items-center gap-1 rounded-full border px-2 py-0.5 text-[10px] text-muted-foreground"
+        title="Chưa có huy hiệu"
+      >
+        No badge
+      </span>
+    );
+  }
+
+  const tier = classifyBadgeTier(badge.point ?? 0);
+
+  const tierStyles: Record<
+    string,
+    { wrap: string; iconWrap: string; icon: string; text: string; Icon: any }
+  > = {
+    bronze: {
+      wrap:
+        'bg-gradient-to-br from-amber-200/70 to-amber-300/60 dark:from-amber-900/30 dark:to-amber-700/40 border-amber-300/60 dark:border-amber-800/60 shadow-sm',
+      iconWrap: 'bg-amber-500/90',
+      icon: 'text-amber-50',
+      text: 'text-amber-900 dark:text-amber-100',
+      Icon: Medal,
+    },
+    silver: {
+      wrap:
+        'bg-gradient-to-br from-slate-100 to-slate-200 dark:from-slate-700/50 dark:to-slate-600/50 border-slate-300/70 dark:border-slate-500/60 shadow',
+      iconWrap: 'bg-slate-300',
+      icon: 'text-slate-900',
+      text: 'text-slate-900 dark:text-slate-100',
+      Icon: Medal,
+    },
+    gold: {
+      wrap:
+        'bg-gradient-to-br from-yellow-200 to-yellow-300 dark:from-yellow-900/30 dark:to-yellow-700/40 border-yellow-400/70 dark:border-yellow-700/70 shadow-md',
+      iconWrap: 'bg-yellow-400',
+      icon: 'text-yellow-950',
+      text: 'text-yellow-900 dark:text-yellow-100',
+      Icon: Trophy,
+    },
+    platinum: {
+      wrap:
+        'bg-gradient-to-br from-violet-200/70 via-fuchsia-200/70 to-pink-200/70 dark:from-violet-800/40 dark:via-fuchsia-800/40 dark:to-pink-800/40 border-fuchsia-300/60 dark:border-fuchsia-700/60 shadow-lg animate-pulse',
+      iconWrap: 'bg-fuchsia-400',
+      icon: 'text-fuchsia-50',
+      text: 'text-fuchsia-900 dark:text-fuchsia-100',
+      Icon: Trophy,
+    },
+    diamond: {
+      wrap:
+        'bg-gradient-to-br from-cyan-200 via-blue-200 to-indigo-200 dark:from-cyan-900/40 dark:via-blue-900/40 dark:to-indigo-900/40 border-cyan-300/70 dark:border-cyan-700/60 shadow-xl ring-1 ring-cyan-400/50 dark:ring-cyan-300/30 animate-pulse',
+      iconWrap: 'bg-cyan-400',
+      icon: 'text-white',
+      text: 'text-cyan-900 dark:text-cyan-100',
+      Icon: Gem,
+    },
+  };
+
+  const s = tierStyles[tier] ?? tierStyles.bronze;
+  const IconEl = s.Icon;
+
+  return (
+    <span
+      className={[
+        'inline-flex items-center rounded-full border px-2 py-0.5 text-[10px] font-medium',
+        'backdrop-blur-[1px]',
+        s.wrap,
+      ].join(' ')}
+      title={badge.description || badge.name}
+    >
+      <span
+        className={`mr-1 inline-flex h-4 w-4 items-center justify-center rounded-full ${s.iconWrap}`}
+        aria-hidden
+      >
+        <IconEl className={`h-3 w-3 ${s.icon}`} />
+      </span>
+      <span className={s.text}>{badge.name}</span>
+    </span>
+  );
+}
+
 export function CommentCard({
   comment,
   onLike,
@@ -48,12 +149,23 @@ export function CommentCard({
   const liked = comment.isPositiveReacted === true;
   const disliked = comment.isNegativeReacted === true;
 
+  const badgesCatalog = useBadgesCatalog();
+
+  const authorPoints =
+  (comment.author as any).reputation_points ?? 0;
+
+const primary = pickPrimaryBadgeByPoints(badgesCatalog, authorPoints);
+
   const onPickImages = (files: FileList | null) => {
     if (!files) return;
     const accepted = Array.from(files).filter((f) =>
       ['image/jpeg', 'image/png', 'image/webp'].includes(f.type)
     );
-    const next = accepted.map((f) => ({ id: uid(), file: f, preview: URL.createObjectURL(f) }));
+    const next = accepted.map((f) => ({
+      id: uid(),
+      file: f,
+      preview: URL.createObjectURL(f),
+    }));
     setImages((prev) => [...prev, ...next]);
   };
   const onPickDocs = (files: FileList | null) => {
@@ -67,7 +179,9 @@ export function CommentCard({
       'application/vnd.rar',
       'application/x-rar-compressed',
     ];
-    const accepted = Array.from(files).filter((f) => allowed.includes(f.type) || f.name.endsWith('.rar'));
+    const accepted = Array.from(files).filter(
+      (f) => allowed.includes(f.type) || f.name.endsWith('.rar')
+    );
     const next = accepted.map((f) => ({ id: uid(), file: f }));
     setDocs((prev) => [...prev, ...next]);
   };
@@ -95,9 +209,11 @@ export function CommentCard({
   };
 
   return (
-    <div id={`comment-${comment.id}`}
+    <div
+      id={`comment-${comment.id}`}
       data-comment-id={comment.id}
-      className="space-y-2 scroll-mt-24">
+      className="space-y-2 scroll-mt-24"
+    >
       <div className="flex gap-3">
         <Avatar className="h-8 w-8">
           <AvatarImage src={comment.author.avatar_url ?? undefined} />
@@ -116,9 +232,9 @@ export function CommentCard({
                 >
                   {comment.author.full_name}
                 </Link>
-                <Badge variant="secondary" className="text-[10px]">
-                  {comment.author.reputation_points} pts
-                </Badge>
+
+                <BadgePillFancy badge={primary as any} />
+
                 <span className="text-[11px] text-muted-foreground">
                   {formatDistanceToNow(new Date(comment.created_at), { addSuffix: true })}
                 </span>
@@ -126,7 +242,6 @@ export function CommentCard({
 
               <p className="text-sm whitespace-pre-wrap">{comment.content}</p>
 
-              {/* Attachments (nếu có) */}
               {(comment.images?.length || comment.documents?.length) ? (
                 <div className="mt-3 space-y-3">
                   {comment.images && comment.images.length > 0 && (
@@ -139,7 +254,11 @@ export function CommentCard({
                           onClick={() => onPreview?.(img.fileUrl)}
                           title={img.title}
                         >
-                          <img src={img.fileUrl} alt={img.title} className="object-cover w-full h-full" />
+                          <img
+                            src={img.fileUrl}
+                            alt={img.title}
+                            className="object-cover w-full h-full"
+                          />
                         </button>
                       ))}
                     </div>
@@ -148,7 +267,10 @@ export function CommentCard({
                   {comment.documents && comment.documents.length > 0 && (
                     <div className="space-y-2">
                       {comment.documents.map((doc) => (
-                        <div key={doc.id} className="flex items-center justify-between rounded-md border p-2">
+                        <div
+                          key={doc.id}
+                          className="flex items-center justify-between rounded-md border p-2"
+                        >
                           <div className="flex items-center gap-2 min-w-0">
                             <FileText className="h-4 w-4" />
                             <span className="truncate">{doc.title || doc.fileUrl}</span>
@@ -207,17 +329,15 @@ export function CommentCard({
 
               {canReply && comment.depth <= 2 && replyOpen && onSubmitReply && (
                 <div className="mt-3 space-y-3">
-                  {/* Textarea + 2 icon góc phải-dưới */}
                   <div className="relative">
                     <Textarea
                       placeholder="Reply..."
                       value={replyText}
                       onChange={(e) => setReplyText(e.target.value)}
                       rows={3}
-                      className="pr-20" // chừa chỗ cho 2 icon
+                      className="pr-20"
                     />
 
-                    {/* Hidden inputs */}
                     <input
                       id={`reply-img-${comment.id}`}
                       type="file"
@@ -235,14 +355,15 @@ export function CommentCard({
                       onChange={(e) => onPickDocs(e.target.files)}
                     />
 
-                    {/* 2 icon ở góc phải-dưới */}
                     <div className="absolute bottom-2 right-2 flex items-center gap-1.5">
                       <Button
                         type="button"
                         variant="ghost"
                         size="icon"
                         title="Attach document"
-                        onClick={() => document.getElementById(`reply-doc-${comment.id}`)?.click()}
+                        onClick={() =>
+                          document.getElementById(`reply-doc-${comment.id}`)?.click()
+                        }
                       >
                         <FilePlus2 className="h-4 w-4" />
                       </Button>
@@ -251,14 +372,15 @@ export function CommentCard({
                         variant="ghost"
                         size="icon"
                         title="Attach image"
-                        onClick={() => document.getElementById(`reply-img-${comment.id}`)?.click()}
+                        onClick={() =>
+                          document.getElementById(`reply-img-${comment.id}`)?.click()
+                        }
                       >
                         <ImagePlus className="h-4 w-4" />
                       </Button>
                     </div>
                   </div>
 
-                  {/* Previews gọn */}
                   {(images.length > 0 || docs.length > 0) && (
                     <div className="space-y-2">
                       {images.length > 0 && (
