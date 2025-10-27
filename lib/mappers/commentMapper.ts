@@ -30,11 +30,9 @@ export type UIComment = {
   positiveReactionCount: number;
   negativeReactionCount: number;
 
-  // tree helpers
   depth: number;
   children: UIComment[];
 
-  // --- NEW (tuỳ chọn): materials gắn với comment ---
   materials?: MaterialResponse[];
   images?: MaterialResponse[];
   documents?: MaterialResponse[];
