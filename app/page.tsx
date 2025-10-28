@@ -10,13 +10,13 @@ import { GraduationCap, BookOpen, Users, MessageSquare, Award, TrendingUp } from
 
 export default function Home() {
   const router = useRouter();
-  const { user, loading } = useAuth();
+  const { profile, loading } = useAuth();
 
   useEffect(() => {
-    if (!loading && user) {
+    if (!loading && profile) {
       router.push('/forum');
     }
-  }, [user, loading, router]);
+  }, [profile, loading, router]);
 
   if (loading) {
     return (
@@ -32,33 +32,33 @@ export default function Home() {
   const features = [
     {
       icon: MessageSquare,
-      title: 'Discussion Forums',
-      description: 'Engage in meaningful conversations about courses and topics',
+      title: 'Forum thảo luận',
+      description: 'Tham gia vào các cuộc trò chuyện thú vị',
     },
     {
       icon: BookOpen,
-      title: 'Study Materials',
-      description: 'Access and share course materials, notes, and resources',
+      title: 'Tài liệu học tập',
+      description: 'Truy cập và chia sẻ tài liệu học tập',
     },
     {
       icon: Users,
-      title: 'Study Groups',
-      description: 'Form groups with peers to collaborate and learn together',
+      title: 'AI Chatbot hỗ trợ đặc thù',
+      description: 'Chatbot được huấn luyện theo ngữ cảnh trường đại học để cung cấp hỗ trợ chính xác nhất',
     },
     {
       icon: Award,
-      title: 'Reputation System',
-      description: 'Earn points for helpful contributions to the community',
+      title: 'Hệ thống điểm thưởng',
+      description: 'Nhận các danh hiệu dựa trên đóng góp của bạn cho cộng đồng',
     },
     {
       icon: TrendingUp,
-      title: 'Personalized Feed',
-      description: 'AI-powered recommendations based on your interests',
+      title: 'Hệ thống đề xuất bài đăng cá nhân hóa',
+      description: 'Bài đăng bạn nhìn thấy trong Forum là sở thích của bạn',
     },
     {
       icon: MessageSquare,
-      title: 'Real-time Chat',
-      description: 'Connect with friends and group members instantly',
+      title: 'Chat theo thời gian thực',
+      description: 'Đoạn Chat bảo mật với bạn bè trên Forum',
     },
   ];
 
@@ -73,18 +73,17 @@ export default function Home() {
             Welcome to SmartPath
           </h1>
           <p className="text-xl text-muted-foreground mb-8 leading-relaxed">
-            A modern platform where university students connect, collaborate, and excel together.
-            Join discussions, share knowledge, and build your academic network.
+            Forum chuyên biệt dành cho sinh viên 
           </p>
           <div className="flex gap-4 justify-center">
-            <Link href="/auth/register">
+            <Link href="/forum">
               <Button size="lg" className="text-lg px-8">
-                Get Started
+                Bắt đầu
               </Button>
             </Link>
             <Link href="/auth/login">
               <Button size="lg" variant="outline" className="text-lg px-8">
-                Sign In
+                Đăng kí
               </Button>
             </Link>
           </div>
@@ -107,13 +106,13 @@ export default function Home() {
         <div className="mt-20 text-center">
           <Card className="max-w-3xl mx-auto bg-gradient-to-br from-blue-500 to-blue-600 text-white border-0">
             <CardContent className="p-12">
-              <h2 className="text-3xl font-bold mb-4">Ready to Join the Community?</h2>
+              <h2 className="text-3xl font-bold mb-4">Sẵn sàng tham gia vào cộng đồng?</h2>
               <p className="text-lg text-blue-50 mb-8">
-                Connect with thousands of students, share your knowledge, and accelerate your learning journey.
+                Kết nối với mọi người trong cộng đồng, truy cập tài liệu học tập và các chủ đề thú vị khác
               </p>
               <Link href="/auth/register">
                 <Button size="lg" variant="secondary" className="text-lg px-8">
-                  Create Your Account
+                  Tạo tài khoản ngay
                 </Button>
               </Link>
             </CardContent>
