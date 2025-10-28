@@ -31,6 +31,29 @@ export default function MessagesPage() {
   const [loading, setLoading] = useState(true);
   const lastJoinedRef = useRef<string | null>(null);
 
+  const {profile}=useAuth()
+  if (!profile) {
+    return (
+<div className="min-h-screen bg-slate-50 dark:bg-slate-950">
+      <Navbar />
+      <div className="flex">
+        <Sidebar />
+
+        <main className="flex-1 p-6 max-w-7xl mx-auto w-full">
+          <div className="space-y-6">
+            <div>
+              <h1 className="text-3xl font-bold">Chat</h1>
+              <p className="text-muted-foreground">
+                Đăng nhập để sử dụng tính năng này
+              </p>
+            </div>
+          </div>
+        </main>
+      </div>
+    </div>
+    );
+  }
+
   const { connected, join, leave } = useChatHub({
     selectedChatId,
     onNewMessage: (raw) => {
@@ -220,7 +243,7 @@ export default function MessagesPage() {
                       <div>
                         <div className="font-medium">{selectedChat.name ?? otherMember?.fullName ?? 'Direct Chat'}</div>
                         <div className="text-sm text-muted-foreground">
-                          {connected ? 'Online' : 'Connecting...'}
+                          {connected ? 'Connected' : 'Connecting...'}
                         </div>
                       </div>
                     </div>

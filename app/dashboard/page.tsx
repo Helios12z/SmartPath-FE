@@ -236,6 +236,27 @@ export default function DashboardPage() {
   });
   const [recent, setRecent] = useState<ActivityItem[]>([]);
 
+  if (!profile) {
+    return (
+      <div className="min-h-screen bg-slate-50 dark:bg-slate-950">
+      <Navbar />
+      <div className="flex">
+        <Sidebar />
+        <main className="flex-1 p-6 max-w-7xl mx-auto w-full">
+          <div className="space-y-6">
+            <div>
+              <h1 className="text-3xl font-bold">Dashboard</h1>
+              <p className="text-muted-foreground">
+                Đăng nhập để sử dụng tính năng này
+              </p>
+            </div>
+          </div>
+        </main>
+      </div>
+    </div>
+    );
+  }
+
   const loadData = useCallback(async () => {
     if (!profile?.id) return;
 
