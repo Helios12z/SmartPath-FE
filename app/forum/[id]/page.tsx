@@ -92,6 +92,7 @@ export default function PostDetailPage() {
   const router = useRouter();
   const { profile } = useAuth();
   const { toast } = useToast();
+  const isGuest = !profile?.id;
 
   const [loading, setLoading] = useState(true);
   const [rawPost, setRawPost] = useState<PostResponseDto | null>(null);
@@ -146,7 +147,7 @@ export default function PostDetailPage() {
     () =>
       uiPost
         ? uiPost.author.primaryBadge ??
-          pickPrimaryBadgeByPoints(badges, uiPost.author.reputation_points ?? 0)
+        pickPrimaryBadgeByPoints(badges, uiPost.author.reputation_points ?? 0)
         : null,
     [uiPost, badges]
   );
@@ -814,7 +815,8 @@ export default function PostDetailPage() {
               size="sm"
               onClick={() => handleReact('like')}
               className={isLiked ? 'text-red-500' : ''}
-              title={isLiked ? 'Unlike' : 'Like'}
+              title={isGuest ? 'Sign in to like' : (isLiked ? 'Unlike' : 'Like')}
+              disabled={isGuest}
             >
               <Heart className={`mr-2 h-4 w-4 ${isLiked ? 'fill-red-500' : ''}`} />
               {posCount}
@@ -825,7 +827,8 @@ export default function PostDetailPage() {
               size="sm"
               onClick={() => handleReact('dislike')}
               className={isDisliked ? 'text-blue-500' : ''}
-              title={isDisliked ? 'Clear dislike' : 'Dislike'}
+              title={isGuest ? 'Sign in to dislike' : (isDisliked ? 'Clear dislike' : 'Dislike')}
+              disabled={isGuest}
             >
               <ThumbsDown className={`mr-2 h-4 w-4 ${isDisliked ? 'fill-blue-500' : ''}`} />
               {negCount}
@@ -857,129 +860,137 @@ export default function PostDetailPage() {
           <h2 className="text-xl font-semibold">Comments ({totalComments})</h2>
         </CardHeader>
         <CardContent className="space-y-6">
-          <form onSubmit={handleSubmitComment} className="space-y-3">
-            <div className="relative">
-              <Textarea
-                placeholder="Comment..."
-                value={newComment}
-                onChange={(e) => setNewComment(e.target.value)}
-                disabled={submittingComment}
-                rows={3}
-                className="pr-20"
-              />
-
-              <input
-                id="c-image-input"
-                type="file"
-                accept="image/jpeg,image/png,image/webp"
-                multiple
-                className="hidden"
-                onChange={(e) => onPickCImages(e.target.files)}
-                disabled={submittingComment}
-              />
-              <input
-                id="c-doc-input"
-                type="file"
-                accept=".pdf,.docx,.xlsx,.pptx,.zip,.rar,application/pdf,application/vnd.openxmlformats-officedocument.wordprocessingml.document,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,application/vnd.openxmlformats-officedocument.presentationml.presentation,application/zip,application/vnd.rar,application/x-rar-compressed"
-                multiple
-                className="hidden"
-                onChange={(e) => onPickCDocs(e.target.files)}
-                disabled={submittingComment}
-              />
-
-              {/* 2 icon ở góc phải-dưới */}
-              <div className="absolute bottom-2 right-2 flex items-center gap-1.5">
-                <Button
-                  type="button"
-                  variant="ghost"
-                  size="icon"
-                  title="Attach document"
-                  onClick={() => document.getElementById('c-doc-input')?.click()}
+          {isGuest ? (
+            <Card className="border-dashed">
+              <CardContent className="p-4 text-sm text-muted-foreground">
+                Hãy <Link href="/auth/login" className="underline">đăng nhập</Link> để bình luận.
+              </CardContent>
+            </Card>
+          ) : (
+            <form onSubmit={handleSubmitComment} className="space-y-3">
+              <div className="relative">
+                <Textarea
+                  placeholder="Comment..."
+                  value={newComment}
+                  onChange={(e) => setNewComment(e.target.value)}
                   disabled={submittingComment}
-                >
-                  <FilePlus2 className="h-4 w-4" />
-                </Button>
-                <Button
-                  type="button"
-                  variant="ghost"
-                  size="icon"
-                  title="Attach image"
-                  onClick={() => document.getElementById('c-image-input')?.click()}
+                  rows={3}
+                  className="pr-20"
+                />
+
+                <input
+                  id="c-image-input"
+                  type="file"
+                  accept="image/jpeg,image/png,image/webp"
+                  multiple
+                  className="hidden"
+                  onChange={(e) => onPickCImages(e.target.files)}
                   disabled={submittingComment}
-                >
-                  <ImagePlus className="h-4 w-4" />
-                </Button>
-              </div>
-            </div>
+                />
+                <input
+                  id="c-doc-input"
+                  type="file"
+                  accept=".pdf,.docx,.xlsx,.pptx,.zip,.rar,application/pdf,application/vnd.openxmlformats-officedocument.wordprocessingml.document,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,application/vnd.openxmlformats-officedocument.presentationml.presentation,application/zip,application/vnd.rar,application/x-rar-compressed"
+                  multiple
+                  className="hidden"
+                  onChange={(e) => onPickCDocs(e.target.files)}
+                  disabled={submittingComment}
+                />
 
-            {/* Previews gọn */}
-            {(cImages.length > 0 || cDocs.length > 0) && (
-              <div className="space-y-2">
-                {cImages.length > 0 && (
-                  <div className="flex gap-2 overflow-x-auto py-1">
-                    {cImages.map((img) => (
-                      <div
-                        key={img.id}
-                        className="relative w-20 h-20 rounded-md overflow-hidden border shrink-0"
-                        title={img.file.name}
-                      >
-                        <img src={img.preview} className="object-cover w-full h-full" />
-                        <button
-                          type="button"
-                          className="absolute top-1 right-1 bg-background/90 rounded-full p-0.5 border"
-                          onClick={() => removeCImage(img.id)}
-                          aria-label="Remove image"
-                        >
-                          <X className="h-3 w-3" />
-                        </button>
-                      </div>
-                    ))}
-                  </div>
-                )}
-
-                {cDocs.length > 0 && (
-                  <div className="flex flex-wrap gap-2">
-                    {cDocs.map((d) => (
-                      <div
-                        key={d.id}
-                        className="flex items-center gap-2 rounded border px-2 py-1 text-xs"
-                        title={d.file.name}
-                      >
-                        <FileText className="h-3.5 w-3.5" />
-                        <span className="max-w-[220px] truncate">{d.file.name}</span>
-                        <button
-                          type="button"
-                          className="ml-1"
-                          onClick={() => removeCDoc(d.id)}
-                          aria-label="Remove document"
-                        >
-                          <X className="h-3.5 w-3.5" />
-                        </button>
-                      </div>
-                    ))}
-                  </div>
-                )}
-              </div>
-            )}
-
-            {/* Progress khi đang submit + có files */}
-            {submittingComment && (cImages.length + cDocs.length) > 0 && (
-              <div className="space-y-1">
-                <div className="flex items-center justify-between">
-                  <span className="text-xs text-muted-foreground">Uploading attachments…</span>
-                  <span className="text-xs">{cUploadProgress}%</span>
+                {/* 2 icon ở góc phải-dưới */}
+                <div className="absolute bottom-2 right-2 flex items-center gap-1.5">
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="icon"
+                    title="Attach document"
+                    onClick={() => document.getElementById('c-doc-input')?.click()}
+                    disabled={submittingComment}
+                  >
+                    <FilePlus2 className="h-4 w-4" />
+                  </Button>
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="icon"
+                    title="Attach image"
+                    onClick={() => document.getElementById('c-image-input')?.click()}
+                    disabled={submittingComment}
+                  >
+                    <ImagePlus className="h-4 w-4" />
+                  </Button>
                 </div>
-                <Progress value={cUploadProgress} />
               </div>
-            )}
 
-            <div className="flex justify-end">
-              <Button type="submit" disabled={submittingComment || !newComment.trim()}>
-                <Send className="mr-2 h-4 w-4" />
-                {submittingComment ? 'Đang đăng...' : 'Đăng Comment'}
-              </Button>
-            </div>
-          </form>
+              {/* Previews gọn */}
+              {(cImages.length > 0 || cDocs.length > 0) && (
+                <div className="space-y-2">
+                  {cImages.length > 0 && (
+                    <div className="flex gap-2 overflow-x-auto py-1">
+                      {cImages.map((img) => (
+                        <div
+                          key={img.id}
+                          className="relative w-20 h-20 rounded-md overflow-hidden border shrink-0"
+                          title={img.file.name}
+                        >
+                          <img src={img.preview} className="object-cover w-full h-full" />
+                          <button
+                            type="button"
+                            className="absolute top-1 right-1 bg-background/90 rounded-full p-0.5 border"
+                            onClick={() => removeCImage(img.id)}
+                            aria-label="Remove image"
+                          >
+                            <X className="h-3 w-3" />
+                          </button>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+
+                  {cDocs.length > 0 && (
+                    <div className="flex flex-wrap gap-2">
+                      {cDocs.map((d) => (
+                        <div
+                          key={d.id}
+                          className="flex items-center gap-2 rounded border px-2 py-1 text-xs"
+                          title={d.file.name}
+                        >
+                          <FileText className="h-3.5 w-3.5" />
+                          <span className="max-w-[220px] truncate">{d.file.name}</span>
+                          <button
+                            type="button"
+                            className="ml-1"
+                            onClick={() => removeCDoc(d.id)}
+                            aria-label="Remove document"
+                          >
+                            <X className="h-3.5 w-3.5" />
+                          </button>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              )}
+
+              {/* Progress khi đang submit + có files */}
+              {submittingComment && (cImages.length + cDocs.length) > 0 && (
+                <div className="space-y-1">
+                  <div className="flex items-center justify-between">
+                    <span className="text-xs text-muted-foreground">Uploading attachments…</span>
+                    <span className="text-xs">{cUploadProgress}%</span>
+                  </div>
+                  <Progress value={cUploadProgress} />
+                </div>
+              )}
+
+              <div className="flex justify-end">
+                <Button type="submit" disabled={submittingComment || !newComment.trim()}>
+                  <Send className="mr-2 h-4 w-4" />
+                  {submittingComment ? 'Đang đăng...' : 'Đăng Comment'}
+                </Button>
+              </div>
+            </form>
+          )}
 
           <Separator />
 
@@ -991,6 +1002,8 @@ export default function PostDetailPage() {
                 <div key={c.id} id={`comment-${c.id}`}>
                   <CommentCard
                     comment={c}
+                    canReact={!isGuest}                         
+                    canReply={!isGuest}  
                     onLike={(id) => handleCommentReact(id, 'like')}
                     onDislike={(id) => handleCommentReact(id, 'dislike')}
                     onSubmitReply={(parentId, content, imgs, docs) =>
@@ -1005,5 +1018,5 @@ export default function PostDetailPage() {
         </CardContent>
       </Card>
     </div>
-  );
+  )
 }

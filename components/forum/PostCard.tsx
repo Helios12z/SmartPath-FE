@@ -19,6 +19,8 @@ interface PostCardProps {
   onDislike?: () => void;
   isLiked?: boolean;
   isDisliked?: boolean;
+  canReact?: boolean;       
+  signInHint?: string;
 }
 
 export function PostCard({
@@ -27,17 +29,18 @@ export function PostCard({
   onDislike,
   isLiked,
   isDisliked,
+  canReact=true,       
+  signInHint,
 }: PostCardProps) {
   const liked = typeof isLiked === 'boolean' ? isLiked : post.isPositiveReacted === true;
   const disliked = typeof isDisliked === 'boolean' ? isDisliked : post.isNegativeReacted === true;
 
-  // Lấy catalog badge và chọn badge theo điểm (ưu tiên badge đã có sẵn từ mapper)
   const badges = useBadgesCatalog();
   const primaryBadge =
     post.author.primaryBadge ??
     pickPrimaryBadgeByPoints(badges, post.author.reputation_points);
-  
-  console.log(post.author.reputation_points)
+
+  const reactTitle = !canReact ? (signInHint ?? 'Đăng nhập để đánh giá') : undefined;
 
   return (
     <Card className="hover:shadow-md transition-shadow">
@@ -105,7 +108,8 @@ export function PostCard({
           <button
             onClick={onLike}
             className="flex items-center gap-1.5 text-sm text-muted-foreground hover:text-red-500 transition-colors"
-            title={liked ? 'Unlike' : 'Like'}
+            title={reactTitle}
+            disabled={!canReact}
             aria-label={liked ? 'Unlike' : 'Like'}
           >
             <Heart className={`h-4 w-4 ${liked ? 'fill-red-500 text-red-500' : ''}`} />
@@ -116,7 +120,8 @@ export function PostCard({
           <button
             onClick={onDislike}
             className="flex items-center gap-1.5 text-sm text-muted-foreground hover:text-blue-500 transition-colors"
-            title={disliked ? 'Clear dislike' : 'Dislike'}
+            title={reactTitle}
+            disabled={!canReact}
             aria-label={disliked ? 'Clear dislike' : 'Dislike'}
           >
             <ThumbsDown className={`h-4 w-4 ${disliked ? 'fill-blue-500 text-blue-500' : ''}`} />

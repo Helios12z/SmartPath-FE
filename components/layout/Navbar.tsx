@@ -1,7 +1,7 @@
 'use client';
 
 import Link from 'next/link';
-import { usePathname, useRouter, useSearchParams } from 'next/navigation';
+import { usePathname, useRouter } from 'next/navigation';
 import { useTheme } from 'next-themes';
 import { useAuth } from '@/context/AuthContext';
 import { Button } from '@/components/ui/button';
@@ -44,6 +44,8 @@ export function Navbar() {
   const router = useRouter();
   const { toast } = useToast();
 
+  const isGuest = !profile?.id; // <- NEW: cờ guest
+
   const handleSignOut = async () => {
     try {
       await logout();
@@ -54,13 +56,17 @@ export function Navbar() {
     }
   };
 
-  const navLinks = [
+  // Chia nav links: public vs. chỉ dành cho user đăng nhập
+  const publicLinks = [
     { href: '/forum', label: 'Forum' },
     { href: '/materials', label: 'Materials' },
+  ];
+  const authedOnlyLinks = [
     { href: '/friends', label: 'Friends' },
   ];
 
-  const { items, unread, loading, markRead, removeLocal, refresh } = useNotifications(20000);
+  // ⬇️ Chỉ bật polling notifications khi đã đăng nhập
+  const { items, unread, loading, markRead, removeLocal, refresh } = useNotifications(profile ? 20000 : 0);
 
   const handleOpen = async (n: any) => {
     try {
@@ -96,9 +102,9 @@ export function Navbar() {
 
         if (cid) {
           const sp = new URLSearchParams(qs.replace(/^\?/, ''));
-          sp.set('c', cid);              
+          sp.set('c', cid);
           qs = `?${sp.toString()}`;
-          hash = `#comment-${encodeURIComponent(cid)}`; 
+          hash = `#comment-${encodeURIComponent(cid)}`;
         }
 
         router.push(`${path}${qs}${hash}`);
@@ -120,37 +126,6 @@ export function Navbar() {
       toast({ title: 'Error', description: 'Cannot open notification', variant: 'destructive' });
     }
   };
-
-  function buildForumUrlFromNotification(n: any): string | null {
-    if (typeof n?.url === 'string' && n.url.trim().length > 0) {
-      const raw = n.url.trim();
-
-      let path = raw;
-      try {
-        const u = new URL(raw, typeof window !== 'undefined' ? window.location.origin : 'https://dummy.local');
-        path = u.pathname + u.search;
-      } catch {
-        //nothing need to be done 
-      }
-
-      const m = path.match(/^\/(posts|forum)\/([^/?#]+)(\?[^#]*)?$/i);
-      if (m) {
-        const postId = m[2];
-        const qs = new URLSearchParams((m[3] ?? '').replace(/^\?/, ''));
-        const c = qs.get('c');
-        return `/forum/${postId}${c ? `?c=${encodeURIComponent(c)}` : ''}`;
-      }
-    }
-
-    const postId = n?.postId ?? n?.PostId ?? n?.post_id;
-    const commentId = n?.commentId ?? n?.CommentId ?? n?.comment_id;
-
-    if (typeof postId === 'string' && postId.length > 0) {
-      return `/forum/${postId}${commentId ? `?c=${encodeURIComponent(commentId)}` : ''}`;
-    }
-    
-    return null;
-  }
 
   const handleDelete = async (id: string) => {
     try {
@@ -210,9 +185,22 @@ export function Navbar() {
               <span className="hidden sm:inline-block">SmartPath</span>
             </Link>
 
-            {profile && (
-              <div className="hidden md:flex items-center gap-1">
-                {navLinks.map((link) => (
+            {/* Links public cho mọi người */}
+            <div className="hidden md:flex items-center gap-1">
+              {publicLinks.map((link) => (
+                <Link key={link.href} href={link.href}>
+                  <Button
+                    variant={pathname?.startsWith(link.href) ? 'secondary' : 'ghost'}
+                    size="sm"
+                  >
+                    {link.label}
+                  </Button>
+                </Link>
+              ))}
+
+              {/* Links chỉ dành cho user đăng nhập */}
+              {!isGuest &&
+                authedOnlyLinks.map((link) => (
                   <Link key={link.href} href={link.href}>
                     <Button
                       variant={pathname?.startsWith(link.href) ? 'secondary' : 'ghost'}
@@ -222,23 +210,22 @@ export function Navbar() {
                     </Button>
                   </Link>
                 ))}
-              </div>
-            )}
+            </div>
           </div>
 
           {/* Right actions */}
           <div className="flex items-center gap-2">
-            {profile ? (
+            {!isGuest ? (
               <>
                 {/* Search */}
-                <Button variant="ghost" size="icon" className="hidden sm:inline-flex">
+                <Button variant="ghost" size="icon" className="hidden sm:inline-flex" title="Search">
                   <Search className="h-5 w-5" />
                 </Button>
 
                 {/* Notifications */}
                 <DropdownMenu>
                   <DropdownMenuTrigger asChild>
-                    <Button variant="ghost" size="icon" className="relative">
+                    <Button variant="ghost" size="icon" className="relative" title="Notifications">
                       <Bell className="h-5 w-5" />
                       {unread > 0 && (
                         <Badge className="absolute -top-1 -right-1 h-5 min-w-5 px-1 flex items-center justify-center p-0 text-[11px]">
@@ -275,10 +262,9 @@ export function Navbar() {
                             key={n.id}
                             className={`px-3 py-2 text-sm hover:bg-accent/60 flex items-start gap-2 ${n.isRead ? 'opacity-70' : ''}`}
                           >
-                            {/* Dot trạng thái */}
+
                             <div className={`mt-1 h-2 w-2 rounded-full ${n.isRead ? 'bg-muted' : 'bg-blue-500'}`} />
 
-                            {/* Nội dung */}
                             <div className="flex-1 min-w-0">
                               <button
                                 onClick={() => handleOpen(n)}
@@ -293,7 +279,6 @@ export function Navbar() {
                               </button>
                             </div>
 
-                            {/* Actions */}
                             <div className="shrink-0 flex items-center gap-1">
                               {!n.isRead && (
                                 <Button
@@ -321,20 +306,19 @@ export function Navbar() {
                   </DropdownMenuContent>
                 </DropdownMenu>
 
-                {/* Theme switch */}
                 <Button
                   variant="ghost"
                   size="icon"
                   onClick={() => setTheme(theme === 'dark' ? 'light' : 'dark')}
+                  title="Toggle theme"
                 >
                   <Sun className="h-5 w-5 rotate-0 scale-100 transition-transform dark:-rotate-90 dark:scale-0" />
                   <Moon className="absolute h-5 w-5 rotate-90 scale-0 transition-transform dark:rotate-0 dark:scale-100" />
                 </Button>
 
-                {/* User dropdown */}
                 <DropdownMenu>
                   <DropdownMenuTrigger asChild>
-                    <Button variant="ghost" className="relative h-10 w-10 rounded-full">
+                    <Button variant="ghost" className="relative h-10 w-10 rounded-full" title="Account">
                       <Avatar className="h-10 w-10">
                         <AvatarImage src={avatarSrc} alt={profile?.fullName ?? 'Avatar'} />
                         <AvatarFallback>
@@ -385,24 +369,22 @@ export function Navbar() {
                   </DropdownMenuContent>
                 </DropdownMenu>
 
-                {/* Mobile menu icon */}
-                <Button variant="ghost" size="icon" className="md:hidden">
+                <Button variant="ghost" size="icon" className="md:hidden" title="Menu">
                   <Menu className="h-5 w-5" />
                 </Button>
               </>
             ) : (
               <>
-                {/* Theme switch (when logged out) */}
                 <Button
                   variant="ghost"
                   size="icon"
                   onClick={() => setTheme(theme === 'dark' ? 'light' : 'dark')}
+                  title="Toggle theme"
                 >
                   <Sun className="h-5 w-5 rotate-0 scale-100 transition-transform dark:-rotate-90 dark:scale-0" />
                   <Moon className="absolute h-5 w-5 rotate-90 scale-0 transition-transform dark:rotate-0 dark:scale-100" />
                 </Button>
 
-                {/* Auth buttons */}
                 <Link href="/auth/login">
                   <Button variant="ghost">Sign In</Button>
                 </Link>

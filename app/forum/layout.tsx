@@ -3,18 +3,9 @@
 import { useAuth } from '@/context/AuthContext';
 import { Navbar } from '@/components/layout/Navbar';
 import { Sidebar } from '@/components/layout/Sidebar';
-import { useRouter } from 'next/navigation';
-import { useEffect } from 'react';
 
 export default function ForumLayout({ children }: { children: React.ReactNode }) {
-  const { profile, loading } = useAuth();
-  const router = useRouter();
-
-  useEffect(() => {
-    if (!loading && !profile) {
-      router.push('/auth/login');
-    }
-  }, [profile, loading, router]);
+  const { loading } = useAuth(); 
 
   if (loading) {
     return (
@@ -25,10 +16,6 @@ export default function ForumLayout({ children }: { children: React.ReactNode })
         </div>
       </div>
     );
-  }
-
-  if (!profile) {
-    return null;
   }
 
   return (

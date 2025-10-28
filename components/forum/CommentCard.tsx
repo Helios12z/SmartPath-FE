@@ -29,6 +29,7 @@ interface CommentCardProps {
     docs: File[]
   ) => Promise<void> | void;
   canReply?: boolean;
+  canReact?: boolean;
   showChildren?: boolean;
   onPreview?: (url: string) => void;
 }
@@ -36,7 +37,7 @@ interface CommentCardProps {
 type PrimaryBadge = {
   id: string;
   name: string;
-  point: number; 
+  point: number;
   description?: string | null;
 };
 
@@ -137,6 +138,7 @@ export function CommentCard({
   onDislike,
   onSubmitReply,
   canReply = true,
+  canReact = true,
   showChildren = true,
   onPreview,
 }: CommentCardProps) {
@@ -152,9 +154,9 @@ export function CommentCard({
   const badgesCatalog = useBadgesCatalog();
 
   const authorPoints =
-  (comment.author as any).reputation_points ?? 0;
+    (comment.author as any).reputation_points ?? 0;
 
-const primary = pickPrimaryBadgeByPoints(badgesCatalog, authorPoints);
+  const primary = pickPrimaryBadgeByPoints(badgesCatalog, authorPoints);
 
   const onPickImages = (files: FileList | null) => {
     if (!files) return;
@@ -292,29 +294,31 @@ const primary = pickPrimaryBadgeByPoints(badgesCatalog, authorPoints);
               ) : null}
 
               <div className="mt-2 flex items-center gap-4 text-xs text-muted-foreground">
-                <button
-                  type="button"
-                  onClick={() => onLike?.(comment.id)}
-                  className={`inline-flex items-center gap-1 hover:text-foreground transition ${
-                    liked ? 'text-red-500' : ''
-                  }`}
-                  title={liked ? 'Unlike' : 'Like'}
-                >
-                  <Heart className={`h-3.5 w-3.5 ${liked ? 'fill-red-500' : ''}`} />
-                  <span>{comment.positiveReactionCount}</span>
-                </button>
+                {canReact && (
+                  <button
+                    type="button"
+                    onClick={() => onLike?.(comment.id)}
+                    className={`inline-flex items-center gap-1 hover:text-foreground transition ${liked ? 'text-red-500' : ''
+                      }`}
+                    title={liked ? 'Unlike' : 'Like'}
+                  >
+                    <Heart className={`h-3.5 w-3.5 ${liked ? 'fill-red-500' : ''}`} />
+                    <span>{comment.positiveReactionCount}</span>
+                  </button>
+                )}
 
-                <button
-                  type="button"
-                  onClick={() => onDislike?.(comment.id)}
-                  className={`inline-flex items-center gap-1 hover:text-foreground transition ${
-                    disliked ? 'text-blue-500' : ''
-                  }`}
-                  title={disliked ? 'Clear dislike' : 'Dislike'}
-                >
-                  <ThumbsDown className={`h-3.5 w-3.5 ${disliked ? 'fill-blue-500' : ''}`} />
-                  <span>{comment.negativeReactionCount}</span>
-                </button>
+                {canReact && (
+                  <button
+                    type="button"
+                    onClick={() => onDislike?.(comment.id)}
+                    className={`inline-flex items-center gap-1 hover:text-foreground transition ${disliked ? 'text-blue-500' : ''
+                      }`}
+                    title={disliked ? 'Clear dislike' : 'Dislike'}
+                  >
+                    <ThumbsDown className={`h-3.5 w-3.5 ${disliked ? 'fill-blue-500' : ''}`} />
+                    <span>{comment.negativeReactionCount}</span>
+                  </button>
+                )}
 
                 {canReply && comment.depth <= 2 && (
                   <button
@@ -451,6 +455,7 @@ const primary = pickPrimaryBadgeByPoints(badgesCatalog, authorPoints);
                   onDislike={onDislike}
                   onSubmitReply={onSubmitReply}
                   canReply={canReply}
+                  canReact={canReact}
                   showChildren={showChildren}
                   onPreview={onPreview}
                 />

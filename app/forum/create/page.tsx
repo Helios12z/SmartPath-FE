@@ -63,7 +63,6 @@ export default function CreatePostPage() {
     return () => {
       images.forEach((img) => URL.revokeObjectURL(img.preview));
     };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   const toggleCategory = (id: string, checked: boolean) => {

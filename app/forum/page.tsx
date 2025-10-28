@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useCallback, useMemo } from 'react';
 import Link from 'next/link';
+import { useRouter } from 'next/navigation';
 import { useAuth } from '@/context/AuthContext';
 import { useToast } from '@/hooks/use-toast';
 
@@ -32,6 +33,9 @@ const FETCH_STRATEGIES: Record<
 export default function ForumPage() {
   const { profile } = useAuth();
   const { toast } = useToast();
+  const router = useRouter();
+
+  const isGuest = !profile?.id; // <-- thêm cờ guest
 
   const [loading, setLoading] = useState(true);
   const [rawPosts, setRawPosts] = useState<PostResponseDto[]>([]);
@@ -58,10 +62,8 @@ export default function ForumPage() {
     fetchPosts();
   }, [fetchPosts]);
 
-  // map sang UI
   const uiPosts: UIPost[] = useMemo(() => rawPosts.map(mapPostToUI), [rawPosts]);
 
-  // filter theo từ khóa
   const filteredPosts = useMemo(() => {
     const q = searchQuery.trim().toLowerCase();
     if (!q) return uiPosts;
@@ -70,7 +72,6 @@ export default function ForumPage() {
     );
   }, [uiPosts, searchQuery]);
 
-  // Popular: sort theo (positive - negative)
   const popularPosts = useMemo(
     () =>
       [...filteredPosts].sort(
@@ -83,13 +84,12 @@ export default function ForumPage() {
 
   type ReactionKind = 'like' | 'dislike';
 
-  // helper cập nhật 1 post trong rawPosts
   const mutateLocal = (postId: string, updater: (p: PostResponseDto) => PostResponseDto) => {
     setRawPosts((cur) => cur.map((p) => (p.id === postId ? updater(p) : p)));
   };
 
   const handleReact = async (postId: string, kind: ReactionKind) => {
-    if (!profile?.id) {
+    if (isGuest) {
       toast({
         title: 'Sign in required',
         description: 'Please sign in to react.',
@@ -106,10 +106,6 @@ export default function ForumPage() {
     const wantPos = kind === 'like';
     const wantNeg = kind === 'dislike';
 
-    // Xác định action
-    // - Nếu user bấm lại cùng loại đang bật -> clear
-    // - Nếu chưa có gì -> set theo muốn
-    // - Nếu đang là loại khác -> chuyển sang loại muốn
     type Action = 'clear' | 'set-like' | 'set-dislike';
     let action: Action;
 
@@ -123,7 +119,6 @@ export default function ForumPage() {
 
     const prev = { ...target };
 
-    // cập nhật lạc quan counters & flags dựa trên action
     mutateLocal(postId, (p) => {
       let pos = p.positiveReactionCount ?? 0;
       let neg = p.negativeReactionCount ?? 0;
@@ -140,22 +135,18 @@ export default function ForumPage() {
         }
       } else if (action === 'set-like') {
         if (isNeg) {
-          // chuyển từ dislike -> like
           neg = Math.max(0, neg - 1);
           pos = pos + 1;
         } else if (!isPos) {
-          // từ neutral -> like
           pos = pos + 1;
         }
         isPos = true;
         isNeg = false;
       } else if (action === 'set-dislike') {
         if (isPos) {
-          // chuyển từ like -> dislike
           pos = Math.max(0, pos - 1);
           neg = neg + 1;
         } else if (!isNeg) {
-          // từ neutral -> dislike
           neg = neg + 1;
         }
         isPos = false;
@@ -183,7 +174,6 @@ export default function ForumPage() {
         toast({ title: 'Success', description: 'Disliked post' });
       }
     } catch (e) {
-      // revert nếu fail
       mutateLocal(postId, () => prev);
       console.error(e);
       toast({ title: 'Error', description: 'Failed to update reaction', variant: 'destructive' });
@@ -195,15 +185,27 @@ export default function ForumPage() {
       <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
         <div>
           <h1 className="text-3xl font-bold">Forum</h1>
-          <p className="text-muted-foreground">Discuss topics and share knowledge</p>
+          <p className="text-muted-foreground">
+            Discuss topics and share knowledge {isGuest && '(Guest)'}
+          </p>
         </div>
+
         <div className="flex items-center gap-2">
-          <Link href="/forum/create">
-            <Button>
-              <PlusCircle className="mr-2 h-4 w-4" />
-              New Post
-            </Button>
-          </Link>
+          {isGuest ? (
+            <Link href="/auth/login">
+              <Button>
+                <PlusCircle className="mr-2 h-4 w-4" />
+                Sign in to Post
+              </Button>
+            </Link>
+          ) : (
+            <Link href="/forum/create">
+              <Button>
+                <PlusCircle className="mr-2 h-4 w-4" />
+                New Post
+              </Button>
+            </Link>
+          )}
         </div>
       </div>
 
@@ -245,15 +247,19 @@ export default function ForumPage() {
           ) : filteredPosts.length === 0 ? (
             <Card className="p-12 text-center">
               <p className="text-muted-foreground">No posts found</p>
-              <Link href="/forum/create">
-                <Button className="mt-4">Create First Post</Button>
-              </Link>
+              {!isGuest && (
+                <Link href="/forum/create">
+                  <Button className="mt-4">Create First Post</Button>
+                </Link>
+              )}
             </Card>
           ) : (
             filteredPosts.map((post) => (
               <PostCard
                 key={post.id}
                 post={post}
+                canReact={!isGuest}                 // <-- mới
+                signInHint={isGuest ? 'Sign in to react' : undefined} // <-- tooltip/hint
                 onLike={() => handleReact(post.id, 'like')}
                 onDislike={() => handleReact(post.id, 'dislike')}
                 isLiked={post.isPositiveReacted === true}
@@ -278,6 +284,8 @@ export default function ForumPage() {
               <PostCard
                 key={post.id}
                 post={post}
+                canReact={!isGuest}                 
+                signInHint={isGuest ? 'Sign in to react' : undefined}
                 onLike={() => handleReact(post.id, 'like')}
                 onDislike={() => handleReact(post.id, 'dislike')}
                 isLiked={post.isPositiveReacted === true}
