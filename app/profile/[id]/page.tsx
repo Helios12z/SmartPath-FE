@@ -22,7 +22,23 @@ import {
   DialogTitle,
   DialogTrigger,
 } from '@/components/ui/dialog';
-import { Award, BookOpen, MessageSquare, Users, Mail, UserPlus, X, Check } from 'lucide-react';
+import {
+  Award,
+  BookOpen,
+  Building2,
+  CalendarDays,
+  Check,
+  FileText,
+  Image,
+  Mail,
+  MessageSquare,
+  Phone,
+  GraduationCap,
+  User,
+  UserPlus,
+  Users,
+  X,
+} from 'lucide-react';
 import { PostCard } from '@/components/forum/PostCard';
 import type { UserProfile, BadgeAward, FriendshipResponseDto } from '@/lib/types';
 import { useToast } from '@/hooks/use-toast';
@@ -472,107 +488,160 @@ export default function ProfilePage() {
                         <DialogTrigger asChild>
                           <Button size="sm" variant="outline">Edit Profile</Button>
                         </DialogTrigger>
-                        <DialogContent className="sm:max-w-lg">
-                          <DialogHeader>
+                        <DialogContent className="sm:max-w-l md:max-w-2xl lg:max-w-3xl">
+                          <DialogHeader className="space-y-3 text-left">
                             <DialogTitle>Edit Profile</DialogTitle>
                             <DialogDescription>
                               Update your avatar and personal information.
                             </DialogDescription>
+                            <p className="text-sm text-muted-foreground">
+                              Keep your details fresh so classmates know how to reach and collaborate with you.
+                            </p>
                           </DialogHeader>
 
-                          <form id="edit-profile-form" className="space-y-4" onSubmit={handleEditSubmit}>
-                            {/* Email */}
-                            <div className="space-y-2">
-                              <Label htmlFor="email">Email</Label>
+                          <form
+                            id="edit-profile-form"
+                            className="mt-4 grid gap-4 md:grid-cols-2 lg:grid-cols-3"
+                            onSubmit={handleEditSubmit}
+                          >
+                            <div className="space-y-2 md:col-span-2 lg:col-span-3">
+                              <Label
+                                htmlFor="email"
+                                className="flex items-center gap-2 text-sm font-medium"
+                              >
+                                <Mail className="h-4 w-4 text-muted-foreground" />
+                                Email
+                              </Label>
                               <Input id="email" value={formState.email} disabled readOnly />
                             </div>
 
-                            {/* Username */}
                             <div className="space-y-2">
-                              <Label htmlFor="username">Username</Label>
+                              <Label
+                                htmlFor="username"
+                                className="flex items-center gap-2 text-sm font-medium"
+                              >
+                                <User className="h-4 w-4 text-muted-foreground" />
+                                Username
+                              </Label>
                               <Input
                                 id="username"
                                 value={formState.username}
-                                onChange={(e) => setFormState((p) => ({ ...p, username: e.target.value }))}
+                                onChange={(e) =>
+                                  setFormState((p) => ({ ...p, username: e.target.value }))
+                                }
                                 disabled={saving}
                               />
                             </div>
 
                             <div className="space-y-2">
-                              <Label htmlFor="full_name">Full Name</Label>
+                              <Label
+                                htmlFor="full_name"
+                                className="flex items-center gap-2 text-sm font-medium"
+                              >
+                                <Users className="h-4 w-4 text-muted-foreground" />
+                                Full Name
+                              </Label>
                               <Input
                                 id="full_name"
                                 value={formState.full_name}
-                                onChange={(e) => setFormState((p) => ({ ...p, full_name: e.target.value }))}
+                                onChange={(e) =>
+                                  setFormState((p) => ({ ...p, full_name: e.target.value }))
+                                }
                                 disabled={saving}
                                 required
                               />
                             </div>
 
                             <div className="space-y-2">
-                              <Label htmlFor="phone_number">Phone Number</Label>
+                              <Label
+                                htmlFor="phone_number"
+                                className="flex items-center gap-2 text-sm font-medium"
+                              >
+                                <Phone className="h-4 w-4 text-muted-foreground" />
+                                Phone Number
+                              </Label>
                               <Input
                                 id="phone_number"
                                 value={formState.phone_number}
-                                onChange={(e) => setFormState((p) => ({ ...p, phone_number: e.target.value }))}
+                                onChange={(e) =>
+                                  setFormState((p) => ({ ...p, phone_number: e.target.value }))
+                                }
                                 disabled={saving}
                                 placeholder="+1234567890"
                               />
                             </div>
 
                             <div className="space-y-2">
-                              <Label htmlFor="avatar_url">Avatar URL</Label>
+                              <Label
+                                htmlFor="avatar_url"
+                                className="flex items-center gap-2 text-sm font-medium"
+                              >
+                                <Image className="h-4 w-4 text-muted-foreground" />
+                                Avatar URL
+                              </Label>
                               <Input
                                 id="avatar_url"
                                 value={formState.avatar_url}
-                                onChange={(e) => setFormState((p) => ({ ...p, avatar_url: e.target.value }))}
+                                onChange={(e) =>
+                                  setFormState((p) => ({ ...p, avatar_url: e.target.value }))
+                                }
                                 disabled={saving}
                                 placeholder="https://example.com/avatar.jpg"
                               />
                             </div>
 
                             <div className="space-y-2">
-                              <Label htmlFor="field_of_study">Major</Label>
+                              <Label
+                                htmlFor="field_of_study"
+                                className="flex items-center gap-2 text-sm font-medium"
+                              >
+                                <GraduationCap className="h-4 w-4 text-muted-foreground" />
+                                Major
+                              </Label>
                               <Input
                                 id="field_of_study"
                                 value={formState.field_of_study}
-                                onChange={(e) => setFormState((p) => ({ ...p, field_of_study: e.target.value }))}
+                                onChange={(e) =>
+                                  setFormState((p) => ({ ...p, field_of_study: e.target.value }))
+                                }
                                 disabled={saving}
                                 placeholder="e.g. Computer Science"
                               />
                             </div>
 
                             <div className="space-y-2">
-                              <Label htmlFor="faculty">Faculty</Label>
+                              <Label
+                                htmlFor="faculty"
+                                className="flex items-center gap-2 text-sm font-medium"
+                              >
+                                <Building2 className="h-4 w-4 text-muted-foreground" />
+                                Faculty
+                              </Label>
                               <Input
                                 id="faculty"
                                 value={formState.faculty}
-                                onChange={(e) => setFormState((p) => ({ ...p, faculty: e.target.value }))}
+                                onChange={(e) =>
+                                  setFormState((p) => ({ ...p, faculty: e.target.value }))
+                                }
                                 disabled={saving}
                                 placeholder="e.g. Engineering"
                               />
                             </div>
 
-                            <div className="space-y-2">
-                              <Label htmlFor="year_of_study">Year of Study</Label>
-                              <Input
-                                id="year_of_study"
-                                type="number"
-                                min={1}
-                                max={20}
-                                value={formState.year_of_study}
-                                onChange={(e) => setFormState((p) => ({ ...p, year_of_study: e.target.value }))}
-                                disabled={saving}
-                                placeholder="e.g. 3"
-                              />
-                            </div>
-
-                            <div className="space-y-2">
-                              <Label htmlFor="bio">Bio</Label>
+                            <div className="space-y-2 md:col-span-2 lg:col-span-3">
+                              <Label
+                                htmlFor="bio"
+                                className="flex items-center gap-2 text-sm font-medium"
+                              >
+                                <FileText className="h-4 w-4 text-muted-foreground" />
+                                Bio
+                              </Label>
                               <Textarea
                                 id="bio"
                                 value={formState.bio}
-                                onChange={(e) => setFormState((p) => ({ ...p, bio: e.target.value }))}
+                                onChange={(e) =>
+                                  setFormState((p) => ({ ...p, bio: e.target.value }))
+                                }
                                 disabled={saving}
                                 rows={4}
                                 placeholder="Tell the community a little about yourself"
@@ -580,8 +649,13 @@ export default function ProfilePage() {
                             </div>
                           </form>
 
-                          <DialogFooter className="gap-2">
-                            <Button type="button" variant="outline" onClick={() => setIsEditOpen(false)} disabled={saving}>
+                          <DialogFooter className="mt-4 flex flex-col-reverse gap-2 sm:flex-row sm:justify-end">
+                            <Button
+                              type="button"
+                              variant="outline"
+                              onClick={() => setIsEditOpen(false)}
+                              disabled={saving}
+                            >
                               Cancel
                             </Button>
                             <Button type="submit" form="edit-profile-form" disabled={saving}>
