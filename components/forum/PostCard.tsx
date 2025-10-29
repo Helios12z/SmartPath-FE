@@ -53,18 +53,16 @@ export function PostCard({
             </Avatar>
 
             <div className="flex-1 min-w-0">
-              <div className="flex flex-col gap-1 min-w-0">
-                <div className="flex items-center gap-2 min-w-0">
-                  <Link
-                    href={`/profile/${post.author.id}`}
-                    className="font-medium hover:underline truncate"
-                  >
-                    {post.author.full_name}
-                  </Link>
+              <div className="flex flex-col items-start gap-1 min-w-0">
+                {/* HIỂN THỊ BADGE CỦA TÁC GIẢ — thay cho reputation points */}
+                <BadgePillFancy badge={primaryBadge} />
 
-                  {/* HIỂN THỊ BADGE CỦA TÁC GIẢ — thay cho reputation points */}
-                  <BadgePillFancy badge={primaryBadge} />
-                </div>
+                <Link
+                  href={`/profile/${post.author.id}`}
+                  className="font-medium hover:underline truncate max-w-full"
+                >
+                  {post.author.full_name}
+                </Link>
               </div>
 
               <p className="text-xs text-muted-foreground">

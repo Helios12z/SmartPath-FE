@@ -227,19 +227,21 @@ export function CommentCard({
         <div className="flex-1">
           <Card className="bg-slate-50 dark:bg-slate-900">
             <CardContent className="p-3">
-              <div className="flex items-center gap-2 mb-1">
-                <Link
-                  href={`/profile/${comment.author.id}`}
-                  className="font-medium text-sm hover:underline"
-                >
-                  {comment.author.full_name}
-                </Link>
-
+              <div className="flex flex-col items-start gap-1 mb-1">
                 <BadgePillFancy badge={primary as any} />
 
-                <span className="text-[11px] text-muted-foreground">
-                  {formatDistanceToNow(new Date(comment.created_at), { addSuffix: true })}
-                </span>
+                <div className="flex items-center gap-2">
+                  <Link
+                    href={`/profile/${comment.author.id}`}
+                    className="font-medium text-sm hover:underline"
+                  >
+                    {comment.author.full_name}
+                  </Link>
+
+                  <span className="text-[11px] text-muted-foreground">
+                    {formatDistanceToNow(new Date(comment.created_at), { addSuffix: true })}
+                  </span>
+                </div>
               </div>
 
               <p className="text-sm whitespace-pre-wrap">{comment.content}</p>
