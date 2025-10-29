@@ -249,6 +249,15 @@ export interface UserRequestDto {
   role?: UserRole; 
 }
 
+export interface BadgeAward {
+  id: string;
+  name: string;
+  description?: string;
+  imageUrl?: string;
+  type?: string;
+  createdAt?: Date;
+}
+
 export interface FriendshipRequestDto { followedUserId: string; }
 export interface FriendshipResponseDto {
   followerId: string;

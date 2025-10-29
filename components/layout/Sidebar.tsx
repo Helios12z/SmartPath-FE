@@ -15,6 +15,7 @@ import {
   Calendar,
   Settings,
   Award,
+  BotIcon,
 } from 'lucide-react';
 import { useAuth } from '@/context/AuthContext';
 
@@ -31,7 +32,7 @@ export function Sidebar() {
   const socialLinks = [
     { href: '/friends', icon: UserPlus, label: 'Friends' },
     { href: '/messages', icon: MessageSquare, label: 'Messages' },
-    { href: '/chatbot', icon: Calendar, label: 'Chatbot' },
+    { href: '/chatbot', icon: BotIcon, label: 'Chatbot' },
   ];
 
   const bottomLinks = [

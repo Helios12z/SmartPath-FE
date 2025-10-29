@@ -573,25 +573,6 @@ export default function ProfilePage() {
 
                             <div className="space-y-2">
                               <Label
-                                htmlFor="avatar_url"
-                                className="flex items-center gap-2 text-sm font-medium"
-                              >
-                                <Image className="h-4 w-4 text-muted-foreground" />
-                                Avatar URL
-                              </Label>
-                              <Input
-                                id="avatar_url"
-                                value={formState.avatar_url}
-                                onChange={(e) =>
-                                  setFormState((p) => ({ ...p, avatar_url: e.target.value }))
-                                }
-                                disabled={saving}
-                                placeholder="https://example.com/avatar.jpg"
-                              />
-                            </div>
-
-                            <div className="space-y-2">
-                              <Label
                                 htmlFor="field_of_study"
                                 className="flex items-center gap-2 text-sm font-medium"
                               >
